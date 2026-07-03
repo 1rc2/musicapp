@@ -1295,8 +1295,9 @@
     });
 
     // ==================== 远程更新 ====================
-    const APP_VERSION = '1.1.7';
-    const APP_VERSION_CODE = 117;
+    // 版本号由 Java 端注入（__APP_VERSION__ / __APP_VERSION_CODE__），不再硬编码
+    const APP_VERSION = window.__APP_VERSION__ || 'dev';
+    const APP_VERSION_CODE = window.__APP_VERSION_CODE__ || 0;
     let updateServer = Storage.get('updateServer', 'github');
     let updateInfo = null;
 

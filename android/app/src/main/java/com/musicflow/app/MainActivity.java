@@ -36,7 +36,19 @@ public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQ = 1001;
     private static final int PERMISSION_REQ = 2001;
     private static final int INSTALL_REQ = 3001;
-    private static final int CURRENT_VERSION_CODE = 10107; // 1.1.7
+
+    /** 运行时读取 APK 版本号（不硬编码，避免每次发版忘记同步） */
+    private int getCurrentVersionCode() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        } catch (Exception e) { return 0; }
+    }
+
+    private String getCurrentVersionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) { return "0.0.0"; }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,7 +81,15 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new MusicBridge(), "NativeBridge");
         webView.setWebChromeClient(new WebChromeClient());
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // 注入当前版本号，JS 不再硬编码
+                view.evaluateJavascript(
+                    "window.__APP_VERSION__='" + getCurrentVersionName() + "';" +
+                    "window.__APP_VERSION_CODE__=" + getCurrentVersionCode() + ";", null);
+            }
+        });
 
         requestPermissions();
         webView.loadUrl("file:///android_asset/public/index.html");
@@ -501,7 +521,7 @@ public class MainActivity extends Activity {
                                 Integer.parseInt(parts[2]);
                         }
 
-                        boolean hasUpdate = remoteCode > CURRENT_VERSION_CODE;
+                        boolean hasUpdate = remoteCode > getCurrentVersionCode();
 
                         String downloadUrl = "";
                         long fileSize = 0;
@@ -523,7 +543,8 @@ public class MainActivity extends Activity {
                         result.put("changelog", body);
                         result.put("downloadUrl", downloadUrl);
                         result.put("fileSize", formatFileSize(fileSize));
-                        result.put("currentVersion", CURRENT_VERSION_CODE);
+                        result.put("currentVersion", getCurrentVersionName());
+                        result.put("currentVersionCode", getCurrentVersionCode());
 
                         final String json = result.toString();
                         callJs("if(window.onLocalUpdateCheckResult)onLocalUpdateCheckResult(" + jsString(json) + ")");
