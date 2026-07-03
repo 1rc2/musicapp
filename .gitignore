@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+android/app/build/
+android/.gradle/
+bin/
+gen/
+.gradle/
+*.keystore
+*.apk
+
+# Capacitor
+android/app/src/main/assets/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.log
+
+# Package manager
+package-lock.json

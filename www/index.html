@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d1117">
+<title>MusicFlow</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 主应用容器 -->
+<div id="app">
+
+  <!-- 页面头部 -->
+  <header class="app-header">
+    <h1 class="app-title">MusicFlow</h1>
+    <div class="header-actions">
+      <button class="icon-btn" id="btn-settings" title="设置">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-search" title="搜索">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-browser" title="浏览器">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main class="main-content" id="main-content">
+
+    <!-- 最近播放页 -->
+    <section class="page active" id="page-recent">
+      <div class="page-header">
+        <h2>最近播放</h2>
+        <button class="text-btn" id="btn-clear-recent">清空</button>
+      </div>
+      <div class="song-list" id="recent-list">
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <p>暂无播放记录</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 本地音乐页 -->
+    <section class="page" id="page-local">
+      <div class="page-header">
+        <h2>本地音乐</h2>
+        <button class="text-btn primary" id="btn-import">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          导入
+        </button>
+      </div>
+      <div class="song-list" id="local-list">
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <p>点击上方「导入」按钮添加音乐</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 歌单页 -->
+    <section class="page" id="page-playlists">
+      <div class="page-header">
+        <h2>我的歌单</h2>
+        <button class="text-btn primary" id="btn-new-playlist">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建
+        </button>
+      </div>
+      <div class="playlist-grid" id="playlist-grid">
+        <!-- 默认歌单：收藏 -->
+        <div class="playlist-card special" data-id="favorites">
+          <div class="playlist-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          </div>
+          <span class="playlist-name">我喜欢的</span>
+          <span class="playlist-count" id="fav-count">0 首</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 歌单详情页 -->
+    <section class="page" id="page-playlist-detail">
+      <div class="page-header">
+        <button class="icon-btn back-btn" id="btn-back-playlist">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2 id="playlist-detail-title">歌单</h2>
+        <button class="icon-btn" id="btn-play-all-playlist" title="播放全部">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+      </div>
+      <div class="song-list" id="playlist-detail-list"></div>
+    </section>
+
+    <!-- 搜索页 -->
+    <section class="page" id="page-search">
+      <div class="search-bar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-input" placeholder="搜索本地音乐...">
+        <button class="text-btn" id="btn-search-clear">清除</button>
+      </div>
+      <div class="song-list" id="search-results"></div>
+    </section>
+
+    <!-- 内置浏览器页 -->
+    <section class="page" id="page-browser">
+      <div class="browser-bar">
+        <button class="icon-btn" id="btn-browser-back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-browser-forward">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-browser-refresh">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+        <input type="text" id="browser-url" placeholder="输入网址或搜索..." value="">
+        <button class="text-btn primary" id="btn-browser-go">前往</button>
+      </div>
+      <div class="browser-bookmarks">
+        <a class="bookmark-item" data-url="https://www.gecimi.com" title="歌词搜索">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>歌词搜索</span>
+        </a>
+        <a class="bookmark-item" data-url="https://music.163.com" title="网易云音乐">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          <span>网易云音乐</span>
+        </a>
+        <a class="bookmark-item" data-url="https://y.qq.com" title="QQ音乐">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          <span>QQ音乐</span>
+        </a>
+        <a class="bookmark-item" data-url="https://www.kugou.com" title="酷狗音乐">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          <span>酷狗音乐</span>
+        </a>
+      </div>
+      <div class="browser-content" id="browser-content">
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <p>输入网址访问音乐网站</p>
+          <p class="hint">支持书签快速访问</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设置页 -->
+    <section class="page" id="page-settings">
+      <div class="page-header">
+        <h2>设置</h2>
+      </div>
+      <div class="settings-list">
+        <div class="settings-group">
+          <div class="settings-group-title">音乐管理</div>
+          <button class="settings-item" id="btn-scan-music">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">扫描本地音乐</span>
+              <span class="settings-item-desc">自动扫描手机中的音乐文件</span>
+            </div>
+            <svg class="settings-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+        <div class="settings-group">
+          <div class="settings-group-title">播放设置</div>
+          <div class="settings-item" id="setting-play-mode">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">默认播放模式</span>
+              <span class="settings-item-desc" id="play-mode-desc">列表播放</span>
+            </div>
+            <svg class="settings-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="settings-item">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">记住播放进度</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-remember-progress" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-item">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">默认音量</span>
+            </div>
+            <input type="range" id="setting-volume" min="0" max="100" value="80" class="setting-slider">
+          </div>
+        </div>
+        <div class="settings-group">
+          <div class="settings-group-title">其他</div>
+          <div class="settings-item" id="setting-about">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">关于</span>
+              <span class="settings-item-desc" id="version-desc">MusicFlow v1.0.0</span>
+            </div>
+            <svg class="settings-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <button class="settings-item" id="btn-check-update">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">检查更新</span>
+              <span class="settings-item-desc" id="update-desc">点击检查新版本</span>
+            </div>
+            <svg class="settings-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <div class="settings-item" id="setting-update-server">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">更新服务器</span>
+              <span class="settings-item-desc" id="update-server-desc">本地测试</span>
+            </div>
+            <svg class="settings-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <button class="settings-item danger" id="btn-clear-data">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">清除所有数据</span>
+              <span class="settings-item-desc">清除播放记录、歌单、收藏等</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 底部播放器 -->
+  <div class="player-bar" id="player-bar">
+    <div class="player-song-info" id="player-song-info">
+      <div class="player-cover" id="player-cover">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg>
+      </div>
+      <div class="player-text">
+        <span class="player-title" id="player-title">未播放</span>
+        <span class="player-artist" id="player-artist">--</span>
+      </div>
+    </div>
+    <div class="player-controls">
+      <button class="icon-btn" id="btn-prev">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+      </button>
+      <button class="play-btn" id="btn-play">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-next">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+      </button>
+    </div>
+    <button class="icon-btn" id="btn-expand-player">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+  </div>
+
+  <!-- 展开播放器 -->
+  <div class="expanded-player" id="expanded-player">
+    <div class="expanded-header">
+      <button class="icon-btn" id="btn-collapse-player">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+      <span>正在播放</span>
+      <button class="icon-btn" id="btn-more">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+      </button>
+    </div>
+
+    <div class="expanded-cover" id="expanded-cover">
+      <div class="cover-art" id="cover-art">
+        <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.5" opacity="0.2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+      </div>
+    </div>
+
+    <div class="expanded-info">
+      <h2 class="expanded-title" id="expanded-title">未播放</h2>
+      <p class="expanded-artist" id="expanded-artist">--</p>
+    </div>
+
+    <div class="progress-section">
+      <div class="progress-bar" id="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+        <div class="progress-thumb" id="progress-thumb"></div>
+      </div>
+      <div class="progress-time">
+        <span id="time-current">0:00</span>
+        <span id="time-total">0:00</span>
+      </div>
+    </div>
+
+    <div class="expanded-controls">
+      <button class="icon-btn" id="btn-mode" title="播放模式">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-prev-large">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+      </button>
+      <button class="play-btn-large" id="btn-play-large">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-next-large">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-favorite-large" title="收藏">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </button>
+    </div>
+
+    <div class="volume-section">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      <input type="range" id="volume-slider" min="0" max="100" value="80" class="volume-slider">
+    </div>
+  </div>
+
+  <!-- 底部导航 -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="nav-item active" data-page="recent">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>最近</span>
+    </button>
+    <button class="nav-item" data-page="local">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <span>音乐</span>
+    </button>
+    <button class="nav-item" data-page="playlists">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>歌单</span>
+    </button>
+    <button class="nav-item" data-page="settings">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>设置</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- 弹窗 - 新建歌单 -->
+<div class="modal" id="modal-new-playlist">
+  <div class="modal-content">
+    <h3>新建歌单</h3>
+    <input type="text" id="new-playlist-name" placeholder="歌单名称" maxlength="30">
+    <div class="modal-actions">
+      <button class="btn btn-cancel" id="btn-cancel-playlist">取消</button>
+      <button class="btn btn-confirm" id="btn-confirm-playlist">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- 弹窗 - 歌曲操作 -->
+<div class="modal" id="modal-song-actions">
+  <div class="modal-content modal-sheet">
+    <div class="sheet-handle"></div>
+    <h3 id="song-action-title">歌曲操作</h3>
+    <div class="action-list" id="song-action-list">
+      <button class="action-item" data-action="favorite">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span>添加到喜欢</span>
+      </button>
+      <button class="action-item" data-action="add-to-playlist">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>添加到歌单</span>
+      </button>
+      <button class="action-item" data-action="remove-from-playlist" style="display:none;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>从歌单移除</span>
+      </button>
+      <button class="action-item danger" data-action="delete">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>删除</span>
+      </button>
+    </div>
+    <button class="btn btn-cancel" id="btn-cancel-actions">取消</button>
+  </div>
+</div>
+
+<!-- 弹窗 - 选择歌单 -->
+<div class="modal" id="modal-select-playlist">
+  <div class="modal-content modal-sheet">
+    <div class="sheet-handle"></div>
+    <h3>添加到歌单</h3>
+    <div class="playlist-select-list" id="playlist-select-list"></div>
+    <button class="btn btn-cancel" id="btn-cancel-select">取消</button>
+  </div>
+</div>
+
+<!-- 弹窗 - 删除歌单 -->
+<div class="modal" id="modal-delete-playlist">
+  <div class="modal-content">
+    <h3>删除歌单</h3>
+    <p id="delete-playlist-msg">确定删除该歌单？歌曲不会被删除。</p>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" id="btn-cancel-delete-pl">取消</button>
+      <button class="btn btn-danger" id="btn-confirm-delete-pl">删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 弹窗 - 检查更新 -->
+<div class="modal" id="modal-update">
+  <div class="modal-content">
+    <h3>检查更新</h3>
+    <div id="update-status">
+      <p>正在检查更新...</p>
+    </div>
+    <div class="modal-actions" id="update-actions" style="display:none;">
+      <button class="btn btn-cancel" id="btn-cancel-update">取消</button>
+      <button class="btn btn-confirm" id="btn-confirm-update">更新</button>
+    </div>
+    <div class="modal-actions" id="update-close-actions" style="display:none;">
+      <button class="btn btn-cancel" id="btn-close-update">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 隐藏的文件输入 -->
+<input type="file" id="file-input" accept="audio/*" multiple hidden>
+
+<script src="app.js"></script>
+</body>
+</html>
