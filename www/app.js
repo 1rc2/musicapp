@@ -914,47 +914,54 @@
     }
   }
 
-  // ==================== 歌词搜索（按语言匹配） ====================
+  // ==================== 歌词搜索（先按歌名匹配，再按语言匹配） ====================
   async function fetchLyrics(title, artist) {
-    // 检测歌名/歌手是否包含中文
-    const isChinese = /[\u4e00-\u9fff]/.test(title) || /[\u4e00-\u9fff]/.test(artist);
+    let neteaseLyrics = null;
 
-    if (isChinese) {
-      // 中文歌曲 → NetEase 云音乐
-      try {
-        const searchQuery = encodeURIComponent(`${title} ${artist}`);
-        const searchRes = await fetch(`https://music.163.com/api/search/pc?type=1&s=${searchQuery}&limit=5`, {
-          headers: { 'Referer': 'https://music.163.com' },
-          signal: AbortSignal.timeout(5000)
-        });
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          if (searchData.result?.songs?.length > 0) {
-            const songId = searchData.result.songs[0].id;
-            const lyricRes = await fetch(`https://music.163.com/api/song/lyric?os=pc&id=${songId}&lv=-1&kv=-1&tv=-1`, {
-              headers: { 'Referer': 'https://music.163.com' },
-              signal: AbortSignal.timeout(5000)
-            });
-            if (lyricRes.ok) {
-              const lyricData = await lyricRes.json();
-              if (lyricData.lrc?.lyric) return lyricData.lrc.lyric;
+    // 第一步：先用歌名在 NetEase 搜索
+    try {
+      const searchQuery = encodeURIComponent(title);
+      const searchRes = await fetch(`https://music.163.com/api/search/pc?type=1&s=${searchQuery}&limit=5`, {
+        headers: { 'Referer': 'https://music.163.com' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.result?.songs?.length > 0) {
+          const songId = searchData.result.songs[0].id;
+          const lyricRes = await fetch(`https://music.163.com/api/song/lyric?os=pc&id=${songId}&lv=-1&kv=-1&tv=-1`, {
+            headers: { 'Referer': 'https://music.163.com' },
+            signal: AbortSignal.timeout(5000)
+          });
+          if (lyricRes.ok) {
+            const lyricData = await lyricRes.json();
+            const lyrics = lyricData.lrc?.lyric;
+            if (lyrics && lyrics.length > 20) {
+              // 第二步：检测歌词内容语言
+              const hasChinese = /[\u4e00-\u9fff]/.test(lyrics);
+              // 如果歌词含中文 → 直接返回（NetEase 匹配到中文歌）
+              if (hasChinese) return lyrics;
+              // 如果歌词是英文 → 缓存结果，继续尝试 lyrics.ovh（英文歌词更全）
+              neteaseLyrics = lyrics;
             }
           }
         }
-      } catch (e) {}
-    } else {
-      // 英文/其他歌曲 → lyrics.ovh
-      try {
-        const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`, {
-          signal: AbortSignal.timeout(5000)
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.lyrics && data.lyrics.length > 20) return data.lyrics;
-        }
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
 
+    // 第三步：英文歌词 → lyrics.ovh
+    try {
+      const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`, {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lyrics && data.lyrics.length > 20) return data.lyrics;
+      }
+    } catch (e) {}
+
+    // 回退：如果 NetEase 有英文歌词但 lyrics.ovh 没找到，返回 NetEase 的结果
+    if (neteaseLyrics) return neteaseLyrics;
     return null;
   }
 
