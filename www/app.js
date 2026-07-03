@@ -156,6 +156,7 @@
     btnFallbackDownload: $('#btn-fallback-download'),
     btnFallbackClose: $('#btn-fallback-close'),
     btnCheckUpdate: $('#btn-check-update'),
+    settingAbout: $('#setting-about'),
     settingUpdateServer: $('#setting-update-server'),
     updateDesc: $('#update-desc'),
     updateServerDesc: $('#update-server-desc'),
