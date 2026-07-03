@@ -160,6 +160,11 @@
     updateDesc: $('#update-desc'),
     updateServerDesc: $('#update-server-desc'),
     versionDesc: $('#version-desc'),
+    updateVersionDisplay: $('#update-version-display'),
+    updateBadge: $('#update-badge'),
+    modalAbout: $('#modal-about'),
+    btnCloseAbout: $('#btn-close-about'),
+    aboutVersion: $('#about-version'),
     // Browser
     browserUrl: $('#browser-url'),
     browserContent: $('#browser-content'),
@@ -1289,8 +1294,8 @@
     });
 
     // ==================== 远程更新 ====================
-    const APP_VERSION = '1.1.3';
-    const APP_VERSION_CODE = 113;
+    const APP_VERSION = '1.1.5';
+    const APP_VERSION_CODE = 115;
     let updateServer = Storage.get('updateServer', 'github');
     let updateInfo = null;
 
@@ -1322,8 +1327,17 @@
       showToast('更新服务器: ' + updateServers[updateServer].name);
     });
 
+    // 关于
+    dom.settingAbout.addEventListener('click', () => {
+      dom.aboutVersion.textContent = APP_VERSION;
+      openModal(dom.modalAbout);
+    });
+    dom.btnCloseAbout.addEventListener('click', () => closeModal(dom.modalAbout));
+
     // 检查更新
     dom.btnCheckUpdate.addEventListener('click', () => {
+      // 隐藏 badge，开始检查
+      dom.updateBadge.style.display = 'none';
       if (updateServer === 'local') {
         checkLocalUpdate();
       } else {
@@ -1350,6 +1364,10 @@
       try {
         const result = JSON.parse(resultJson);
         if (result.hasUpdate) {
+          // 显示新版本 badge
+          dom.updateBadge.style.display = 'inline';
+          dom.updateDesc.textContent = '发现新版本 v' + result.newVersion;
+
           dom.updateStatus.innerHTML = `
             <div class="update-version">发现新版本 v${result.newVersion}</div>
             <p>当前版本: v${APP_VERSION}</p>
@@ -1369,14 +1387,13 @@
             startLocalDownload(result);
           };
         } else {
-          dom.updateStatus.innerHTML = `<p class="update-latest">已是最新版本 v${APP_VERSION}</p>`;
-          dom.updateActions.style.display = 'none';
-          dom.updateCloseActions.style.display = 'flex';
+          // 无新版本 → toast 提示
+          showToast('当前已是最新版本 v' + APP_VERSION);
+          closeModal(dom.modalUpdate);
         }
       } catch (e) {
-        dom.updateStatus.innerHTML = `<p class="update-error">检查失败: ${e.message}</p>`;
-        dom.updateActions.style.display = 'none';
-        dom.updateCloseActions.style.display = 'flex';
+        showToast('检查更新失败: ' + e.message);
+        closeModal(dom.modalUpdate);
       }
     };
 
@@ -1518,6 +1535,10 @@
     renderAll();
     dom.btnMode.innerHTML = modeIcons[playMode];
     dom.volumeSlider.value = volume;
+
+    // 版本号显示
+    dom.updateVersionDisplay.textContent = APP_VERSION;
+    dom.versionDesc.textContent = 'MusicFlow v' + APP_VERSION;
 
     // 恢复上次播放状态
     const lastSongId = Storage.get('lastSong');

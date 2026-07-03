@@ -206,14 +206,14 @@
           </div>
         </div>
         <div class="settings-group">
-          <div class="settings-group-title">其他</div>
+          <div class="settings-group-title">关于</div>
           <div class="settings-item" id="setting-about">
             <div class="settings-item-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             </div>
             <div class="settings-item-text">
-              <span class="settings-item-label">关于</span>
-              <span class="settings-item-desc" id="version-desc">MusicFlow v1.0.0</span>
+              <span class="settings-item-label">关于 MusicFlow</span>
+              <span class="settings-item-desc" id="version-desc"></span>
             </div>
             <svg class="settings-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
@@ -223,8 +223,9 @@
             </div>
             <div class="settings-item-text">
               <span class="settings-item-label">检查更新</span>
-              <span class="settings-item-desc" id="update-desc">点击检查新版本</span>
+              <span class="settings-item-desc" id="update-desc">当前版本 v<span id="update-version-display"></span></span>
             </div>
+            <span class="update-badge" id="update-badge" style="display:none;">新版本</span>
             <svg class="settings-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
           <div class="settings-item" id="setting-update-server">
@@ -429,6 +430,32 @@
     <div class="modal-actions">
       <button class="btn btn-cancel" id="btn-cancel-delete-pl">取消</button>
       <button class="btn btn-danger" id="btn-confirm-delete-pl">删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 弹窗 - 关于 -->
+<div class="modal" id="modal-about">
+  <div class="modal-content">
+    <h3>关于 MusicFlow</h3>
+    <div style="text-align:center;padding:12px 0;">
+      <div style="font-size:48px;margin-bottom:8px;">🎵</div>
+      <div style="font-size:20px;font-weight:700;color:var(--text-primary);">MusicFlow</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">版本 <span id="about-version"></span></div>
+    </div>
+    <div style="padding:0 4px 16px;font-size:14px;color:var(--text-secondary);line-height:1.8;">
+      <p><strong>MusicFlow</strong> 是一款简洁优雅的本地音乐播放器，专注于为你提供纯净的音乐体验。</p>
+      <p style="margin-top:8px;">✦ 支持本地音乐导入与播放</p>
+      <p>✦ 智能歌词匹配（中文/英文）</p>
+      <p>✦ 多种播放模式（单曲循环/随机/列表）</p>
+      <p>✦ 自定义歌单管理</p>
+      <p>✦ 应用内更新，始终保持最新</p>
+    </div>
+    <div style="text-align:center;padding:8px 0;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border);">
+      创作者：芙伊
+    </div>
+    <div class="modal-actions" id="about-close-actions" style="display:flex;">
+      <button class="btn btn-cancel" id="btn-close-about">关闭</button>
     </div>
   </div>
 </div>
