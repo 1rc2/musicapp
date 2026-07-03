@@ -152,6 +152,9 @@
     btnCancelUpdate: $('#btn-cancel-update'),
     btnConfirmUpdate: $('#btn-confirm-update'),
     btnCloseUpdate: $('#btn-close-update'),
+    updateFallbackActions: $('#update-fallback-actions'),
+    btnFallbackDownload: $('#btn-fallback-download'),
+    btnFallbackClose: $('#btn-fallback-close'),
     btnCheckUpdate: $('#btn-check-update'),
     settingUpdateServer: $('#setting-update-server'),
     updateDesc: $('#update-desc'),
@@ -1378,6 +1381,10 @@
     };
 
     function startLocalDownload(info) {
+      // 重置超时检测
+      lastDownloadProgress = -1;
+      if (downloadStuckTimer) { clearTimeout(downloadStuckTimer); downloadStuckTimer = null; }
+
       dom.updateStatus.querySelector('#download-progress-bar').style.display = 'block';
       dom.updateStatus.querySelector('#download-progress-text').style.display = 'block';
       dom.btnConfirmUpdate.textContent = '下载中...';
@@ -1394,21 +1401,13 @@
       }
     }
 
-    // 下载进度回调
-    window.onUpdateDownloadProgress = function(progress) {
-      try {
-        const p = parseInt(progress);
-        const bar = document.getElementById('download-progress-fill');
-        const text = document.getElementById('download-progress-text');
-        if (bar) bar.style.width = p + '%';
-        if (text) text.textContent = '下载中 ' + p + '%';
-      } catch (e) {}
-    };
-
     // 下载完成回调
     window.onUpdateDownloadComplete = function(path) {
+      // 清理超时检测
+      if (downloadStuckTimer) { clearTimeout(downloadStuckTimer); downloadStuckTimer = null; }
       dom.updateStatus.querySelector('#download-progress-text').textContent = '下载完成，准备安装...';
       dom.updateStatus.querySelector('#download-progress-text').className = 'update-latest';
+      dom.updateFallbackActions.style.display = 'none';
 
       // 调用原生安装
       if (NativeBridge) {
@@ -1423,9 +1422,35 @@
         text.textContent = '下载失败: ' + errorMsg;
         text.className = 'update-error';
       }
-      dom.btnConfirmUpdate.textContent = '重试';
-      dom.btnConfirmUpdate.disabled = false;
-      dom.btnCancelUpdate.style.display = '';
+      // 显示备用下载按钮
+      dom.updateActions.style.display = 'none';
+      dom.updateCloseActions.style.display = 'none';
+      dom.updateFallbackActions.style.display = 'flex';
+    };
+
+    // 下载超时检测：如果 10 秒内进度没变化，认为卡住了
+    let lastDownloadProgress = -1;
+    let downloadStuckTimer = null;
+
+    window.onUpdateDownloadProgress = function(progress) {
+      try {
+        const p = parseInt(progress);
+        const bar = document.getElementById('download-progress-fill');
+        const text = document.getElementById('download-progress-text');
+        if (bar) bar.style.width = p + '%';
+        if (text) text.textContent = '下载中 ' + p + '%';
+
+        // 超时检测
+        if (p === lastDownloadProgress) return; // 没变化不重置计时
+        lastDownloadProgress = p;
+        if (downloadStuckTimer) clearTimeout(downloadStuckTimer);
+        downloadStuckTimer = setTimeout(() => {
+          if (p < 100) {
+            // 卡住了，显示备用下载
+            window.onUpdateDownloadError('下载超时，请使用浏览器下载');
+          }
+        }, 15000); // 15 秒没进度变化认为卡住
+      } catch (e) {}
     };
 
     async function checkRemoteUpdate() {
@@ -1448,6 +1473,18 @@
     // 关闭更新弹窗
     dom.btnCancelUpdate.addEventListener('click', () => closeModal(dom.modalUpdate));
     dom.btnCloseUpdate.addEventListener('click', () => closeModal(dom.modalUpdate));
+    dom.btnFallbackClose.addEventListener('click', () => closeModal(dom.modalUpdate));
+    dom.btnFallbackDownload.addEventListener('click', () => {
+      // 跳转浏览器下载 APK
+      if (updateInfo && updateInfo.downloadUrl) {
+        if (NativeBridge) {
+          NativeBridge.openExternalBrowser(updateInfo.downloadUrl);
+        } else {
+          window.open(updateInfo.downloadUrl, '_blank');
+        }
+      }
+      closeModal(dom.modalUpdate);
+    });
 
     // 媒体会话（锁屏控制）
     if ('mediaSession' in navigator) {
