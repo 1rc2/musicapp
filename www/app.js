@@ -914,47 +914,46 @@
     }
   }
 
-  // ==================== 歌词搜索 ====================
+  // ==================== 歌词搜索（按语言匹配） ====================
   async function fetchLyrics(title, artist) {
-    // 尝试多个 API 源获取歌词
-    const queries = [
-      // 源 1: lyrics.ovh（免费，主要适用英文歌曲）
-      { url: `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`, parser: d => d.lyrics },
-    ];
+    // 检测歌名/歌手是否包含中文
+    const isChinese = /[\u4e00-\u9fff]/.test(title) || /[\u4e00-\u9fff]/.test(artist);
 
-    for (const q of queries) {
+    if (isChinese) {
+      // 中文歌曲 → NetEase 云音乐
       try {
-        const res = await fetch(q.url, { signal: AbortSignal.timeout(5000) });
-        if (res.ok) {
-          const data = await res.json();
-          const lyrics = q.parser(data);
-          if (lyrics && lyrics.length > 20) return lyrics;
-        }
-      } catch (e) { continue; }
-    }
-
-    // 源 2: 通过 NetEase 搜索（中文歌曲）
-    try {
-      const searchQuery = encodeURIComponent(`${title} ${artist}`);
-      const searchRes = await fetch(`https://music.163.com/api/search/pc?type=1&s=${searchQuery}&limit=5`, {
-        headers: { 'Referer': 'https://music.163.com' },
-        signal: AbortSignal.timeout(5000)
-      });
-      if (searchRes.ok) {
-        const searchData = await searchRes.json();
-        if (searchData.result && searchData.result.songs && searchData.result.songs.length > 0) {
-          const songId = searchData.result.songs[0].id;
-          const lyricRes = await fetch(`https://music.163.com/api/song/lyric?os=pc&id=${songId}&lv=-1&kv=-1&tv=-1`, {
-            headers: { 'Referer': 'https://music.163.com' },
-            signal: AbortSignal.timeout(5000)
-          });
-          if (lyricRes.ok) {
-            const lyricData = await lyricRes.json();
-            if (lyricData.lrc && lyricData.lrc.lyric) return lyricData.lrc.lyric;
+        const searchQuery = encodeURIComponent(`${title} ${artist}`);
+        const searchRes = await fetch(`https://music.163.com/api/search/pc?type=1&s=${searchQuery}&limit=5`, {
+          headers: { 'Referer': 'https://music.163.com' },
+          signal: AbortSignal.timeout(5000)
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (searchData.result?.songs?.length > 0) {
+            const songId = searchData.result.songs[0].id;
+            const lyricRes = await fetch(`https://music.163.com/api/song/lyric?os=pc&id=${songId}&lv=-1&kv=-1&tv=-1`, {
+              headers: { 'Referer': 'https://music.163.com' },
+              signal: AbortSignal.timeout(5000)
+            });
+            if (lyricRes.ok) {
+              const lyricData = await lyricRes.json();
+              if (lyricData.lrc?.lyric) return lyricData.lrc.lyric;
+            }
           }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    } else {
+      // 英文/其他歌曲 → lyrics.ovh
+      try {
+        const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`, {
+          signal: AbortSignal.timeout(5000)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.lyrics && data.lyrics.length > 20) return data.lyrics;
+        }
+      } catch (e) {}
+    }
 
     return null;
   }
