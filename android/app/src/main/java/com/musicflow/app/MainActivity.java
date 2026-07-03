@@ -137,8 +137,8 @@ public class MainActivity extends Activity {
                 result.put("files", filesArray);
                 final String json = result.toString();
                 runOnUiThread(() -> {
-                    webView.evaluateJavascript("if(window.onNativeFilesResult)onNativeFilesResult('" +
-                        json.replace("'", "\\'").replace("\n", "") + "')", null);
+                    webView.evaluateJavascript("if(window.onNativeFilesResult)onNativeFilesResult(" +
+                        jsString(json) + ")", null);
                 });
             } catch (Exception e) {
                 e.printStackTrace();
@@ -221,6 +221,11 @@ public class MainActivity extends Activity {
                 webView.evaluateJavascript(js, null);
             } catch (Exception e) {}
         });
+    }
+
+    /** 将字符串安全转义为 JavaScript 字符串字面量（处理所有特殊字符） */
+    private String jsString(String s) {
+        return org.json.JSONObject.quote(s != null ? s : "");
     }
 
     private void installApk(String path) {
@@ -357,12 +362,8 @@ public class MainActivity extends Activity {
 
                     runOnUiThread(() -> {
                         try {
-                            String escaped = json.replace("\\", "\\\\")
-                                .replace("'", "\\'")
-                                .replace("\n", "\\n")
-                                .replace("\r", "");
                             webView.evaluateJavascript(
-                                "if(window.onNativeScanResult)onNativeScanResult('" + escaped + "')",
+                                "if(window.onNativeScanResult)onNativeScanResult(" + jsString(json) + ")",
                                 null);
                         } catch (Exception e) {
                             e.printStackTrace();
@@ -396,8 +397,8 @@ public class MainActivity extends Activity {
                         result.put("apkPath", apkPath);
                         result.put("changelog", "将安装更新版本的 MusicFlow。\n\n文件: " + apkFile.getName() + "\n大小: " + sizeStr);
 
-                        final String json = result.toString().replace("'", "\\'").replace("\n", "\\n");
-                        callJs("if(window.onLocalUpdateCheckResult)onLocalUpdateCheckResult('" + json + "')");
+                        final String json = result.toString();
+                        callJs("if(window.onLocalUpdateCheckResult)onLocalUpdateCheckResult(" + jsString(json) + ")");
                     } else {
                         callJs("if(window.onLocalUpdateCheckResult)onLocalUpdateCheckResult('{\"hasUpdate\":false}')");
                     }
@@ -418,16 +419,14 @@ public class MainActivity extends Activity {
 
                     String apkPath = getLatestApkPath();
                     if (apkPath != null) {
-                        callJs("if(window.onUpdateDownloadComplete)onUpdateDownloadComplete('" +
-                            apkPath.replace("'", "\\'") + "')");
+                        callJs("if(window.onUpdateDownloadComplete)onUpdateDownloadComplete(" + jsString(apkPath) + ")");
                         Thread.sleep(500);
                         installApk(apkPath);
                     } else {
-                        callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('未找到 APK 文件。请先将新 APK 放到 Download/MusicFlow/updates/ 目录')");
+                        callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("未找到 APK 文件。请先将新 APK 放到 Download/MusicFlow/updates/ 目录") + ")");
                     }
                 } catch (Exception e) {
-                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('" +
-                        (e.getMessage() != null ? e.getMessage().replace("'", "") : "未知错误") + "')");
+                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString(e.getMessage() != null ? e.getMessage() : "未知错误") + ")");
                 }
             }).start();
         }
@@ -512,18 +511,17 @@ public class MainActivity extends Activity {
                         result.put("downloadUrl", downloadUrl);
                         result.put("currentVersion", CURRENT_VERSION_CODE);
 
-                        final String json = result.toString().replace("'", "\\'").replace("\n", "\\n");
-                        callJs("if(window.onLocalUpdateCheckResult)onLocalUpdateCheckResult('" + json + "')");
+                        final String json = result.toString();
+                        callJs("if(window.onLocalUpdateCheckResult)onLocalUpdateCheckResult(" + jsString(json) + ")");
 
                         if (hasUpdate && !downloadUrl.isEmpty()) {
                             downloadApkFromUrl(downloadUrl);
                         }
                     } else {
-                        callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('服务器返回: " + conn.getResponseCode() + "')");
+                        callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("服务器返回: " + conn.getResponseCode()) + ")");
                     }
                 } catch (Exception e) {
-                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('网络错误: " +
-                        (e.getMessage() != null ? e.getMessage().replace("'", "") : "") + "')");
+                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("网络错误: " + (e.getMessage() != null ? e.getMessage() : "")) + ")");
                 } finally {
                     if (conn != null) conn.disconnect();
                 }
@@ -572,15 +570,13 @@ public class MainActivity extends Activity {
                 callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('100')");
 
                 final String path = outFile.getAbsolutePath();
-                callJs("if(window.onUpdateDownloadComplete)onUpdateDownloadComplete('" +
-                    path.replace("'", "\\'") + "')");
+                callJs("if(window.onUpdateDownloadComplete)onUpdateDownloadComplete(" + jsString(path) + ")");
 
                 Thread.sleep(500);
                 installApk(path);
 
             } catch (Exception e) {
-                callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('下载失败: " +
-                    (e.getMessage() != null ? e.getMessage().replace("'", "") : "") + "')");
+                callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("下载失败: " + (e.getMessage() != null ? e.getMessage() : "")) + ")");
             } finally {
                 if (conn != null) conn.disconnect();
             }
