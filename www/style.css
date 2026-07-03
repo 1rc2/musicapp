@@ -1,20 +1,20 @@
 /* ========== CSS Variables ========== */
 :root {
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #21262d;
-  --bg-elevated: #1c2128;
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted: #484f58;
-  --accent: #58a6ff;
-  --accent-hover: #79b8ff;
-  --accent-dim: rgba(88, 166, 255, 0.15);
-  --danger: #f85149;
-  --danger-dim: rgba(248, 81, 73, 0.15);
-  --success: #3fb950;
-  --border: #30363d;
-  --shadow: rgba(0, 0, 0, 0.4);
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f7;
+  --bg-tertiary: #e8e8ed;
+  --bg-elevated: #ffffff;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-muted: #aeaeb2;
+  --accent: #007aff;
+  --accent-hover: #0066d6;
+  --accent-dim: rgba(0, 122, 255, 0.1);
+  --danger: #ff3b30;
+  --danger-dim: rgba(255, 59, 48, 0.1);
+  --success: #34c759;
+  --border: #d2d2d7;
+  --shadow: rgba(0, 0, 0, 0.08);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -339,7 +339,7 @@ input {
 }
 
 .playlist-card.special .playlist-icon {
-  background: linear-gradient(135deg, #f85149, #d73a49);
+  background: linear-gradient(135deg, var(--danger), #d62d20);
 }
 
 .playlist-icon {
@@ -789,7 +789,7 @@ input {
   flex: 1;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: white;
+  background: var(--bg-elevated);
 }
 
 .browser-content iframe {
@@ -845,7 +845,7 @@ input {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1048,7 +1048,7 @@ input {
 /* ========== Responsive ========== */
 @media (min-width: 481px) {
   body {
-    background: #000;
+    background: #f5f5f7;
   }
   #app {
     border-left: 1px solid var(--border);

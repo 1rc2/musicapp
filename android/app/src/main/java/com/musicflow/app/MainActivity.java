@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -39,13 +40,15 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(0xFF0D1117);
-        getWindow().setNavigationBarColor(0xFF0D1117);
+        getWindow().setStatusBarColor(0xFFF5F5F7);
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().setNavigationBarColor(0xFFF5F5F7);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
 
         webView = new WebView(this);
-        webView.setBackgroundColor(0xFF0D1117);
+        webView.setBackgroundColor(0xFFFFFFFF);
         setContentView(webView);
 
         WebSettings settings = webView.getSettings();
