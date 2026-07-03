@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQ = 1001;
     private static final int PERMISSION_REQ = 2001;
     private static final int INSTALL_REQ = 3001;
-    private static final int CURRENT_VERSION_CODE = 10101; // 1.1.1
+    private static final int CURRENT_VERSION_CODE = 10103; // 1.1.3
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
