@@ -540,6 +540,58 @@ input {
   color: var(--text-secondary);
 }
 
+.btn-match-lyric {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-match-lyric:active { opacity: 0.6; }
+.btn-match-lyric.loading { opacity: 0.5; pointer-events: none; }
+
+.lyrics-section {
+  flex: 1;
+  overflow: hidden;
+  margin: 8px 0 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  min-height: 0;
+}
+
+.lyrics-content {
+  height: 100%;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 2;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.lyrics-content .lyric-line {
+  padding: 2px 0;
+  transition: color 0.2s;
+}
+.lyrics-content .lyric-line.active {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 15px;
+}
+.lyrics-content .lyric-empty {
+  color: var(--text-muted);
+  padding: 40px 0;
+  font-size: 13px;
+}
+
 /* ========== Progress ========== */
 .progress-section {
   padding: 16px 0;

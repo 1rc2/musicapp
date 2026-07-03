@@ -121,6 +121,8 @@
     playerSongInfo: $('#player-song-info'),
     btnExpandPlayer: $('#btn-expand-player'),
     btnCollapsePlayer: $('#btn-collapse-player'),
+    btnMatchLyric: $('#btn-match-lyric'),
+    lyricsContent: $('#lyrics-content'),
     btnSearch: $('#btn-search'),
     btnBrowser: $('#btn-browser'),
     btnSearchClear: $('#btn-search-clear'),
@@ -912,6 +914,51 @@
     }
   }
 
+  // ==================== 歌词搜索 ====================
+  async function fetchLyrics(title, artist) {
+    // 尝试多个 API 源获取歌词
+    const queries = [
+      // 源 1: lyrics.ovh（免费，主要适用英文歌曲）
+      { url: `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`, parser: d => d.lyrics },
+    ];
+
+    for (const q of queries) {
+      try {
+        const res = await fetch(q.url, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          const lyrics = q.parser(data);
+          if (lyrics && lyrics.length > 20) return lyrics;
+        }
+      } catch (e) { continue; }
+    }
+
+    // 源 2: 通过 NetEase 搜索（中文歌曲）
+    try {
+      const searchQuery = encodeURIComponent(`${title} ${artist}`);
+      const searchRes = await fetch(`https://music.163.com/api/search/pc?type=1&s=${searchQuery}&limit=5`, {
+        headers: { 'Referer': 'https://music.163.com' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.result && searchData.result.songs && searchData.result.songs.length > 0) {
+          const songId = searchData.result.songs[0].id;
+          const lyricRes = await fetch(`https://music.163.com/api/song/lyric?os=pc&id=${songId}&lv=-1&kv=-1&tv=-1`, {
+            headers: { 'Referer': 'https://music.163.com' },
+            signal: AbortSignal.timeout(5000)
+          });
+          if (lyricRes.ok) {
+            const lyricData = await lyricRes.json();
+            if (lyricData.lrc && lyricData.lrc.lyric) return lyricData.lrc.lyric;
+          }
+        }
+      }
+    } catch (e) {}
+
+    return null;
+  }
+
   // ==================== 渲染所有 ====================
   function renderAll() {
     renderLocal();
@@ -950,6 +997,47 @@
     dom.btnExpandPlayer.addEventListener('click', expandPlayer);
     dom.btnCollapsePlayer.addEventListener('click', collapsePlayer);
     dom.playerSongInfo.addEventListener('click', expandPlayer);
+
+    // 匹配歌词
+    dom.btnMatchLyric.addEventListener('click', async () => {
+      if (!currentSong) return;
+      dom.btnMatchLyric.classList.add('loading');
+      dom.btnMatchLyric.textContent = '搜索中...';
+
+      try {
+        const lyrics = await fetchLyrics(currentSong.title, currentSong.artist);
+        const lycEl = dom.lyricsContent;
+        const lyricSection = document.getElementById('lyrics-section');
+
+        if (lyrics) {
+          lyricSection.style.display = 'block';
+          // 尝试解析带时间戳的 LRC 歌词
+          const lines = lyrics.split('\n').filter(l => l.trim());
+          if (lines.length > 0 && /\[\d{2}:\d{2}\.\d{2,3}\]/.test(lines[0])) {
+            // LRC 格式
+            lycEl.innerHTML = lines.map(line => {
+              const text = line.replace(/\[\d{2}:\d{2}\.\d{2,3}\]/g, '').trim();
+              return text ? `<div class="lyric-line">${escHtml(text)}</div>` : '';
+            }).join('');
+          } else {
+            // 纯文本
+            lycEl.innerHTML = lines.map(l => `<div class="lyric-line">${escHtml(l)}</div>`).join('');
+          }
+          dom.btnMatchLyric.textContent = '歌词已加载';
+        } else {
+          lyricSection.style.display = 'block';
+          lycEl.innerHTML = '<div class="lyric-empty">未找到歌词</div>';
+          dom.btnMatchLyric.textContent = '未找到歌词';
+        }
+      } catch (e) {
+        document.getElementById('lyrics-section').style.display = 'block';
+        dom.lyricsContent.innerHTML = '<div class="lyric-empty">歌词搜索失败</div>';
+        dom.btnMatchLyric.textContent = '匹配歌词';
+      } finally {
+        dom.btnMatchLyric.classList.remove('loading');
+        setTimeout(() => { dom.btnMatchLyric.textContent = '匹配歌词'; }, 3000);
+      }
+    });
 
     // 播放模式
     dom.btnMode.innerHTML = modeIcons[playMode];
