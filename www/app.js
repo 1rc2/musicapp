@@ -1295,8 +1295,8 @@
     });
 
     // ==================== 远程更新 ====================
-    const APP_VERSION = '1.1.5';
-    const APP_VERSION_CODE = 115;
+    const APP_VERSION = '1.1.7';
+    const APP_VERSION_CODE = 117;
     let updateServer = Storage.get('updateServer', 'github');
     let updateInfo = null;
 
