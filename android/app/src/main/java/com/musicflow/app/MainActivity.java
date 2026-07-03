@@ -1,12 +1,10 @@
 package com.musicflow.app;
 
 import android.app.Activity;
-import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.ContentUris;
+import android.content.ContentValues;
 import android.content.Intent;
-import android.content.IntentSender;
-import android.content.pm.PackageInstaller;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -236,60 +234,70 @@ public class MainActivity extends Activity {
     }
 
     private void installApk(String path) {
-        try {
-            File apkFile = new File(path);
-            if (!apkFile.exists()) {
-                callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("APK 文件不存在") + ")");
-                return;
+        runOnUiThread(() -> {
+            try {
+                File apkFile = new File(path);
+                if (!apkFile.exists()) {
+                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("APK 文件不存在") + ")");
+                    return;
+                }
+
+                // 把 APK 复制到公共 Downloads 目录
+                File downloadDir = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS);
+                if (!downloadDir.exists()) downloadDir.mkdirs();
+                File publicApk = new File(downloadDir, "MusicFlow_update.apk");
+                copyFile(apkFile, publicApk);
+
+                Uri apkUri;
+                if (Build.VERSION.SDK_INT >= 24) {
+                    // Android 7+: 通过 MediaStore 获取 content:// URI
+                    apkUri = getUriForFile(publicApk);
+                } else {
+                    apkUri = Uri.fromFile(publicApk);
+                }
+
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                if (Build.VERSION.SDK_INT >= 24) {
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
+                startActivity(intent);
+
+                callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('100')");
+            } catch (Exception e) {
+                // 所有方式都失败 → 提示用户手动安装
+                callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" +
+                    jsString("自动安装失败，请到 Download 目录手动点击 MusicFlow_update.apk 安装") + ")");
+            }
+        });
+    }
+
+    /** 获取文件的 content:// URI（兼容 Android 7+） */
+    private Uri getUriForFile(File file) {
+        if (Build.VERSION.SDK_INT >= 24) {
+            // Android 7+ 到 9: 使用 FileProvider 风格的 content URI
+            // 由于没有 AndroidX，手动构建 content URI
+            try {
+                // 方法1: 通过 MediaStore 扫描文件
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, file.getName());
+                values.put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive");
+                values.put(MediaStore.MediaColumns.DATA, file.getAbsolutePath());
+
+                ContentResolver resolver = getContentResolver();
+                // 尝试插入 MediaStore
+                Uri contentUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (contentUri != null) return contentUri;
+            } catch (Exception e) {
+                // MediaStore 方式失败
             }
 
-            // Android 5+ 使用 PackageInstaller API（无需 FileProvider）
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                PackageInstaller packageInstaller = getPackageManager().getPackageInstaller();
-                PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
-                    PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-
-                int sessionId = packageInstaller.createSession(params);
-                PackageInstaller.Session session = null;
-                try {
-                    session = packageInstaller.openSession(sessionId);
-
-                    try (OutputStream out = session.openWrite("MusicFlow_update", 0, -1);
-                         InputStream in = new FileInputStream(apkFile)) {
-                        byte[] buffer = new byte[8192];
-                        int len;
-                        while ((len = in.read(buffer)) != -1) {
-                            out.write(buffer, 0, len);
-                        }
-                        session.fsync(out);
-                    }
-
-                    Intent intent = new Intent(MainActivity.this, MainActivity.class);
-                    PendingIntent pendingIntent = PendingIntent.getActivity(
-                        MainActivity.this, INSTALL_REQ, intent,
-                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-                    IntentSender intentSender = pendingIntent.getIntentSender();
-                    session.commit(intentSender);
-                    callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('100')");
-                } catch (Exception e) {
-                    if (session != null) session.abandon();
-                    copyToDownloadsAndNotify(apkFile);
-                }
-            } else {
-                // Android 4.x 及以下：直接使用 file:// URI
-                try {
-                    Uri apkUri = Uri.fromFile(apkFile);
-                    Intent intent = new Intent(Intent.ACTION_VIEW);
-                    intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(intent);
-                } catch (Exception e) {
-                    copyToDownloadsAndNotify(apkFile);
-                }
-            }
-        } catch (Exception e) {
-            callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("安装失败: " + (e.getMessage() != null ? e.getMessage() : "")) + ")");
+            // 方法2: 直接用 Downloads 的 content URI 格式
+            return Uri.parse("content://downloads/public_downloads/" + file.getAbsolutePath());
         }
+        return Uri.fromFile(file);
     }
 
     /** 复制 APK 到公共 Downloads 目录并提示用户手动安装 */
