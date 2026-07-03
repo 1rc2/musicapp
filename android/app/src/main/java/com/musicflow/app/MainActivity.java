@@ -1,9 +1,12 @@
 package com.musicflow.app;
 
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Intent;
+import android.content.IntentSender;
+import android.content.pm.PackageInstaller;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -25,6 +28,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
@@ -235,49 +239,70 @@ public class MainActivity extends Activity {
         try {
             File apkFile = new File(path);
             if (!apkFile.exists()) {
-                callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('APK 文件不存在')");
+                callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("APK 文件不存在") + ")");
                 return;
             }
 
-            Uri apkUri;
-            boolean useFileProvider = false;
+            // Android 5+ 使用 PackageInstaller API（无需 FileProvider）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                PackageInstaller packageInstaller = getPackageManager().getPackageInstaller();
+                PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
+                    PackageInstaller.SessionParams.MODE_FULL_INSTALL);
 
-            // Android 7+ 需要 FileProvider 或特殊处理
-            if (Build.VERSION.SDK_INT >= 24) {
-                // 复制到 app 外部缓存目录，通过 FileProvider 或直接使用
-                // 方案：先尝试用 FileProvider，如果不可用则复制到 Download 目录
+                int sessionId = packageInstaller.createSession(params);
+                PackageInstaller.Session session = null;
                 try {
-                    File cacheDir = new File(getCacheDir(), "update");
-                    if (!cacheDir.exists()) cacheDir.mkdirs();
-                    File cachedApk = new File(cacheDir, "MusicFlow_update.apk");
-                    copyFile(apkFile, cachedApk);
-                    apkUri = Uri.fromFile(cachedApk);
-                    // 在 Android 7+ 上，使用 cache 目录的 Uri.fromFile 仍然会崩溃
-                    // 改用 DOWNLOAD 目录
-                    File downloadDir = Environment.getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOWNLOADS);
-                    File publicApk = new File(downloadDir, "MusicFlow_update.apk");
-                    copyFile(apkFile, publicApk);
-                    apkUri = Uri.fromFile(publicApk);
+                    session = packageInstaller.openSession(sessionId);
+
+                    try (OutputStream out = session.openWrite("MusicFlow_update", 0, -1);
+                         InputStream in = new FileInputStream(apkFile)) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, len);
+                        }
+                        session.fsync(out);
+                    }
+
+                    Intent intent = new Intent(MainActivity.this, MainActivity.class);
+                    PendingIntent pendingIntent = PendingIntent.getActivity(
+                        MainActivity.this, INSTALL_REQ, intent,
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                    IntentSender intentSender = pendingIntent.getIntentSender();
+                    session.commit(intentSender);
+                    callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('100')");
                 } catch (Exception e) {
-                    // 最终还是失败，提示用户手动安装
-                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('请手动从 Download 目录安装更新')");
-                    return;
+                    if (session != null) session.abandon();
+                    copyToDownloadsAndNotify(apkFile);
                 }
             } else {
-                apkUri = Uri.fromFile(apkFile);
+                // Android 4.x 及以下：直接使用 file:// URI
+                try {
+                    Uri apkUri = Uri.fromFile(apkFile);
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    copyToDownloadsAndNotify(apkFile);
+                }
             }
-
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            if (Build.VERSION.SDK_INT >= 24) {
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            }
-            startActivity(intent);
         } catch (Exception e) {
-            callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('安装失败: " +
-                (e.getMessage() != null ? e.getMessage().replace("'", "") : "未知错误") + "')");
+            callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("安装失败: " + (e.getMessage() != null ? e.getMessage() : "")) + ")");
+        }
+    }
+
+    /** 复制 APK 到公共 Downloads 目录并提示用户手动安装 */
+    private void copyToDownloadsAndNotify(File apkFile) {
+        try {
+            File downloadDir = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS);
+            File publicApk = new File(downloadDir, "MusicFlow_update.apk");
+            copyFile(apkFile, publicApk);
+            callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" +
+                jsString("请手动安装更新\n打开文件管理器 → Download → 点击 MusicFlow_update.apk 安装") + ")");
+        } catch (Exception e) {
+            callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("安装失败，请手动从 Download 目录安装更新") + ")");
         }
     }
 
@@ -291,6 +316,13 @@ public class MainActivity extends Activity {
         }
         in.close();
         out.close();
+    }
+
+    /** 格式化文件大小为可读字符串 */
+    private String formatFileSize(long bytes) {
+        if (bytes <= 0) return "未知大小";
+        if (bytes < 1024 * 1024) return String.format("%.0f KB", bytes / 1024.0);
+        return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
     }
 
     class MusicBridge {
@@ -496,12 +528,14 @@ public class MainActivity extends Activity {
                         boolean hasUpdate = remoteCode > CURRENT_VERSION_CODE;
 
                         String downloadUrl = "";
+                        long fileSize = 0;
                         JSONArray assets = release.optJSONArray("assets");
                         if (assets != null) {
                             for (int i = 0; i < assets.length(); i++) {
                                 JSONObject asset = assets.getJSONObject(i);
                                 if (asset.getString("name").endsWith(".apk")) {
                                     downloadUrl = asset.getString("browser_download_url");
+                                    fileSize = asset.optLong("size", 0);
                                     break;
                                 }
                             }
@@ -512,6 +546,7 @@ public class MainActivity extends Activity {
                         result.put("newVersion", remoteVersion);
                         result.put("changelog", body);
                         result.put("downloadUrl", downloadUrl);
+                        result.put("fileSize", formatFileSize(fileSize));
                         result.put("currentVersion", CURRENT_VERSION_CODE);
 
                         final String json = result.toString();
