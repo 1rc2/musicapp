@@ -1384,9 +1384,13 @@
       dom.btnConfirmUpdate.disabled = true;
       dom.btnCancelUpdate.style.display = 'none';
 
-      // 调用原生下载
+      // 调用原生下载（远程 or 本地）
       if (NativeBridge) {
-        NativeBridge.startLocalUpdate();
+        if (info.downloadUrl) {
+          NativeBridge.startRemoteDownload(info.downloadUrl);
+        } else {
+          NativeBridge.startLocalUpdate();
+        }
       }
     }
 

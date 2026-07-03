@@ -472,6 +472,11 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void startRemoteDownload(String downloadUrl) {
+            new Thread(() -> downloadApkFromUrl(downloadUrl)).start();
+        }
+
+        @JavascriptInterface
         public void openExternalBrowser(String url) {
             runOnUiThread(() -> {
                 try {
@@ -551,10 +556,6 @@ public class MainActivity extends Activity {
 
                         final String json = result.toString();
                         callJs("if(window.onLocalUpdateCheckResult)onLocalUpdateCheckResult(" + jsString(json) + ")");
-
-                        if (hasUpdate && !downloadUrl.isEmpty()) {
-                            downloadApkFromUrl(downloadUrl);
-                        }
                     } else {
                         callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("服务器返回: " + conn.getResponseCode()) + ")");
                     }
