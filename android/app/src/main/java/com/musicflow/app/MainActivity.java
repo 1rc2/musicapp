@@ -234,27 +234,21 @@ public class MainActivity extends Activity {
     }
 
     private void installApk(String path) {
+        File apkFile = new File(path);
         runOnUiThread(() -> {
             try {
-                File apkFile = new File(path);
                 if (!apkFile.exists()) {
                     callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("APK 文件不存在") + ")");
                     return;
                 }
 
-                // 把 APK 复制到公共 Downloads 目录
-                File downloadDir = Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_DOWNLOADS);
-                if (!downloadDir.exists()) downloadDir.mkdirs();
-                File publicApk = new File(downloadDir, "MusicFlow_update.apk");
-                copyFile(apkFile, publicApk);
-
                 Uri apkUri;
                 if (Build.VERSION.SDK_INT >= 24) {
-                    // Android 7+: 通过 MediaStore 获取 content:// URI
-                    apkUri = getUriForFile(publicApk);
+                    // Android 7+: 通过 FileProvider 获取 content:// URI
+                    apkUri = GenericFileProvider.getUriForFile(this,
+                        "com.musicflow.app.fileprovider", apkFile);
                 } else {
-                    apkUri = Uri.fromFile(publicApk);
+                    apkUri = Uri.fromFile(apkFile);
                 }
 
                 Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -265,53 +259,22 @@ public class MainActivity extends Activity {
                 }
                 startActivity(intent);
 
-                callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('100')");
             } catch (Exception e) {
-                // 所有方式都失败 → 提示用户手动安装
-                callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" +
-                    jsString("自动安装失败，请到 Download 目录手动点击 MusicFlow_update.apk 安装") + ")");
+                // FileProvider 失败 → 复制到 Downloads 目录提示手动安装
+                try {
+                    File downloadDir = Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS);
+                    if (!downloadDir.exists()) downloadDir.mkdirs();
+                    File publicApk = new File(downloadDir, "MusicFlow_update.apk");
+                    copyFile(apkFile, publicApk);
+                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" +
+                        jsString("请到 Download 目录手动点击 MusicFlow_update.apk 安装") + ")");
+                } catch (Exception e2) {
+                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" +
+                        jsString("安装失败: " + (e.getMessage() != null ? e.getMessage() : "")) + ")");
+                }
             }
         });
-    }
-
-    /** 获取文件的 content:// URI（兼容 Android 7+） */
-    private Uri getUriForFile(File file) {
-        if (Build.VERSION.SDK_INT >= 24) {
-            // Android 7+ 到 9: 使用 FileProvider 风格的 content URI
-            // 由于没有 AndroidX，手动构建 content URI
-            try {
-                // 方法1: 通过 MediaStore 扫描文件
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.MediaColumns.DISPLAY_NAME, file.getName());
-                values.put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive");
-                values.put(MediaStore.MediaColumns.DATA, file.getAbsolutePath());
-
-                ContentResolver resolver = getContentResolver();
-                // 尝试插入 MediaStore
-                Uri contentUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-                if (contentUri != null) return contentUri;
-            } catch (Exception e) {
-                // MediaStore 方式失败
-            }
-
-            // 方法2: 直接用 Downloads 的 content URI 格式
-            return Uri.parse("content://downloads/public_downloads/" + file.getAbsolutePath());
-        }
-        return Uri.fromFile(file);
-    }
-
-    /** 复制 APK 到公共 Downloads 目录并提示用户手动安装 */
-    private void copyToDownloadsAndNotify(File apkFile) {
-        try {
-            File downloadDir = Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_DOWNLOADS);
-            File publicApk = new File(downloadDir, "MusicFlow_update.apk");
-            copyFile(apkFile, publicApk);
-            callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" +
-                jsString("请手动安装更新\n打开文件管理器 → Download → 点击 MusicFlow_update.apk 安装") + ")");
-        } catch (Exception e) {
-            callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("安装失败，请手动从 Download 目录安装更新") + ")");
-        }
     }
 
     private void copyFile(File src, File dst) throws Exception {
