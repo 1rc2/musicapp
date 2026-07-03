@@ -1194,7 +1194,7 @@
     // ==================== 远程更新 ====================
     const APP_VERSION = '1.0.0';
     const APP_VERSION_CODE = 100;
-    let updateServer = Storage.get('updateServer', 'local');
+    let updateServer = Storage.get('updateServer', 'github');
     let updateInfo = null;
 
     // 更新服务器配置
