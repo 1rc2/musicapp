@@ -532,6 +532,7 @@ input {
   color: var(--text-muted);
   transition: transform 0.3s;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .cover-art.spinning {
@@ -1430,7 +1431,7 @@ input {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: 50%;
 }
 .cover-art.spinning .cover-img-large {
   animation: spin 8s linear infinite;
