@@ -215,6 +215,16 @@
         </div>
         <div class="settings-group">
           <div class="settings-group-title">封面</div>
+          <div class="settings-item" id="setting-custom-cover">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">自定义播放器封面</span>
+              <span class="settings-item-desc" id="cover-custom-desc">使用默认封面</span>
+            </div>
+            <svg class="settings-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
           <div class="settings-item" id="setting-cover-anim">
             <div class="settings-item-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
@@ -228,6 +238,15 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
+          <button class="settings-item" id="setting-reset-cover">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">重置为默认封面</span>
+              <span class="settings-item-desc">恢复APP默认封面和图标</span>
+            </div>
+          </button>
         </div>
         <div class="settings-group">
           <div class="settings-group-title">关于</div>
@@ -284,6 +303,7 @@
 
   <!-- 底部播放器 -->
   <div class="player-bar" id="player-bar">
+    <div class="player-bar-progress" id="player-bar-progress"></div>
     <div class="player-song-info" id="player-song-info">
       <div class="player-cover" id="player-cover">
         <img id="cover-img-small" class="cover-img-small" src="default_cover_small_static.png" alt="cover">
@@ -507,6 +527,7 @@
 
 <!-- 隐藏的文件输入 -->
 <input type="file" id="file-input" accept="audio/*" multiple hidden>
+<input type="file" id="image-input" accept="image/*" style="display:none">
 
 <script src="app.js"></script>
 </body>

@@ -8,11 +8,14 @@ import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Base64;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -24,6 +27,7 @@ import android.webkit.WebViewClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -466,7 +470,191 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void startRemoteDownload(String downloadUrl) {
-            new Thread(() -> downloadApkFromUrl(downloadUrl)).start();
+            new Thread(() -> {
+                HttpURLConnection conn = null;
+                try {
+                    callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('0')");
+
+                    URL url = new URL(downloadUrl);
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(30000);
+                    conn.setReadTimeout(30000);
+                    conn.setInstanceFollowRedirects(true);
+
+                    int totalSize = conn.getContentLength();
+                    InputStream is = conn.getInputStream();
+
+                    File outFile = new File(getUpdateDir(), "MusicFlow_update.apk");
+                    FileOutputStream fos = new FileOutputStream(outFile);
+
+                    byte[] buffer = new byte[8192];
+                    int total = 0;
+                    int len;
+                    long lastProgress = 0;
+
+                    while ((len = is.read(buffer)) != -1) {
+                        fos.write(buffer, 0, len);
+                        total += len;
+                        if (totalSize > 0) {
+                            int progress = Math.min(99, (int) ((total * 100) / totalSize));
+                            long now = System.currentTimeMillis();
+                            if (now - lastProgress > 500) {
+                                lastProgress = now;
+                                final int p = progress;
+                                callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('" + p + "')");
+                            }
+                        }
+                    }
+
+                    fos.close();
+                    is.close();
+
+                    callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('100')");
+
+                    final String path = outFile.getAbsolutePath();
+                    callJs("if(window.onUpdateDownloadComplete)onUpdateDownloadComplete(" + jsString(path) + ")");
+
+                    Thread.sleep(500);
+                    installApk(path);
+
+                } catch (Exception e) {
+                    callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("下载失败: " + (e.getMessage() != null ? e.getMessage() : "")) + ")");
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void getCoverImage(String songUrl) {
+            // TODO: implement cover image retrieval
+            callJs("if(window.onCoverImageResult)onCoverImageResult('')");
+        }
+
+        @JavascriptInterface
+        public void downloadOnlineSong(String songUrl, String filename) {
+            new Thread(() -> {
+                HttpURLConnection conn = null;
+                try {
+                    callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('" + filename + "',0,0)");
+
+                    URL url = new URL(songUrl);
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(30000);
+                    conn.setInstanceFollowRedirects(true);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android)");
+
+                    int totalSize = conn.getContentLength();
+                    InputStream is = conn.getInputStream();
+
+                    File musicDir = new File(getFilesDir(), "music");
+                    if (!musicDir.exists()) musicDir.mkdirs();
+                    File outFile = new File(musicDir, filename);
+                    FileOutputStream fos = new FileOutputStream(outFile);
+
+                    byte[] buffer = new byte[8192];
+                    int total = 0;
+                    int len;
+                    long lastProgress = 0;
+
+                    while ((len = is.read(buffer)) != -1) {
+                        fos.write(buffer, 0, len);
+                        total += len;
+                        if (totalSize > 0) {
+                            int pct = (int) ((total * 100) / totalSize);
+                            long now = System.currentTimeMillis();
+                            if (now - lastProgress > 300) {
+                                lastProgress = now;
+                                final int p = pct;
+                                callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('" + filename + "'," + p + "," + totalSize + ")");
+                            }
+                        }
+                    }
+
+                    fos.close();
+                    is.close();
+
+                    final String path = outFile.getAbsolutePath();
+                    final long size = outFile.length();
+                    callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete(" + jsString(filename) + "," + jsString(path) + "," + size + ")");
+                } catch (Exception e) {
+                    callJs("if(window.onOnlineDownloadError)onOnlineDownloadError(" + jsString(filename) + "," + jsString(e.getMessage()) + ")");
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void saveCoverImage(String base64Data) {
+            new Thread(() -> {
+                try {
+                    // 解码 base64
+                    String cleanData = base64Data;
+                    if (cleanData.contains(",")) {
+                        cleanData = cleanData.split(",")[1];
+                    }
+                    byte[] imageBytes = Base64.decode(cleanData, Base64.DEFAULT);
+
+                    // 保存封面到私有目录
+                    File coverDir = new File(getFilesDir(), "custom_cover");
+                    if (!coverDir.exists()) coverDir.mkdirs();
+                    File coverFile = new File(coverDir, "cover.png");
+                    FileOutputStream fos = new FileOutputStream(coverFile);
+                    fos.write(imageBytes);
+                    fos.close();
+
+                    // 生成桌面图标
+                    Bitmap src = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+                    if (src != null) {
+                        int[] dpis = {48, 72, 96, 144, 192};
+                        String[] folders = {"mipmap-mdpi", "mipmap-hdpi", "mipmap-xhdpi", "mipmap-xxhdpi", "mipmap-xxxhdpi"};
+                        for (int i = 0; i < dpis.length; i++) {
+                            File dir = new File(getFilesDir(), "custom_icons/" + folders[i]);
+                            if (!dir.exists()) dir.mkdirs();
+
+                            Bitmap animIcon = Bitmap.createScaledBitmap(src, dpis[i], dpis[i], true);
+                            File animFile = new File(dir, "ic_launcher_anim.png");
+                            FileOutputStream fos2 = new FileOutputStream(animFile);
+                            animIcon.compress(Bitmap.CompressFormat.PNG, 90, fos2);
+                            fos2.close();
+
+                            Bitmap staticIcon = Bitmap.createBitmap(dpis[i], dpis[i], Bitmap.Config.ARGB_8888);
+                            android.graphics.Canvas canvas = new android.graphics.Canvas(staticIcon);
+                            canvas.drawBitmap(animIcon, 0, 0, null);
+                            android.graphics.Paint paint = new android.graphics.Paint();
+                            paint.setColor(android.graphics.Color.argb(60, 100, 100, 100));
+                            canvas.drawRect(0, 0, dpis[i], dpis[i], paint);
+                            File staticFile = new File(dir, "ic_launcher_static.png");
+                            FileOutputStream fos3 = new FileOutputStream(staticFile);
+                            staticIcon.compress(Bitmap.CompressFormat.PNG, 90, fos3);
+                            fos3.close();
+
+                            animIcon.recycle();
+                            staticIcon.recycle();
+                        }
+                        src.recycle();
+                    }
+
+                    callJs("if(window.onCoverImageSaved)onCoverImageSaved(" + jsString(coverFile.getAbsolutePath()) + ")");
+                } catch (Exception e) {
+                    callJs("if(window.onCoverImageError)onCoverImageError(" + jsString(e.getMessage()) + ")");
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void resetCover() {
+            try {
+                File coverDir = new File(getFilesDir(), "custom_cover");
+                deleteDir(coverDir);
+                File iconsDir = new File(getFilesDir(), "custom_icons");
+                deleteDir(iconsDir);
+                callJs("if(window.onCoverImageReset)onCoverImageReset()");
+            } catch (Exception e) {
+                callJs("if(window.onCoverImageError)onCoverImageError(" + jsString(e.getMessage()) + ")");
+            }
         }
 
         @JavascriptInterface
@@ -506,6 +694,43 @@ public class MainActivity extends Activity {
                     callJs("if(window.onUpdateDownloadError)onUpdateDownloadError('无法打开浏览器')");
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void searchOnline(final String keyword) {
+            new Thread(() -> {
+                HttpURLConnection conn = null;
+                try {
+                    String query = java.net.URLEncoder.encode(keyword, "UTF-8");
+                    String urlStr = "https://music.163.com/api/search/get/web?csrf_token=&hlpretag=&hlposttag=&s=" + query + "&type=1&offset=0&total=true&limit=30";
+                    java.net.URL url = new java.net.URL(urlStr);
+                    conn = (java.net.HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(8000);
+                    conn.setReadTimeout(8000);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/100.0");
+                    conn.setRequestProperty("Referer", "https://music.163.com/");
+                    conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+
+                    if (conn.getResponseCode() == 200) {
+                        java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(conn.getInputStream(), "UTF-8"));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) sb.append(line);
+                        reader.close();
+                        final String json = sb.toString();
+                        callJs("if(window.onOnlineSearchResult)onOnlineSearchResult(" + jsString(json) + ")");
+                    } else {
+                        callJs("if(window.onOnlineSearchError)onOnlineSearchError(" + jsString("HTTP " + conn.getResponseCode()) + ")");
+                    }
+                } catch (Exception e) {
+                    String msg = e.getMessage() != null ? e.getMessage() : "网络错误";
+                    callJs("if(window.onOnlineSearchError)onOnlineSearchError(" + jsString(msg) + ")");
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+            }).start();
         }
 
         @JavascriptInterface
@@ -640,6 +865,18 @@ public class MainActivity extends Activity {
                 if (conn != null) conn.disconnect();
             }
         }
+    }
+
+    private void deleteDir(File dir) {
+        if (dir == null || !dir.exists()) return;
+        File[] files = dir.listFiles();
+        if (files != null) {
+            for (File f : files) {
+                if (f.isDirectory()) deleteDir(f);
+                else f.delete();
+            }
+        }
+        dir.delete();
     }
 
     @Override

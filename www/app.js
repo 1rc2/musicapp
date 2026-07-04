@@ -110,6 +110,7 @@
     progressBar: $('#progress-bar'),
     progressFill: $('#progress-fill'),
     progressThumb: $('#progress-thumb'),
+    playerBarProgress: $('#player-bar-progress'),
     timeCurrent: $('#time-current'),
     timeTotal: $('#time-total'),
     // Volume
@@ -162,6 +163,7 @@
     settingCoverAnim: $('#setting-cover-anim'),
     toggleCoverAnim: $('#toggle-cover-anim'),
     coverAnimDesc: $('#cover-anim-desc'),
+    coverCustomDesc: $('#cover-custom-desc'),
     coverImgSmall: $('#cover-img-small'),
     coverImgLarge: $('#cover-img-large'),
     aboutIconImg: $('#about-icon-img'),
@@ -265,6 +267,7 @@
     }
 
     currentSong = song;
+    loadCoverForSong(song);
     audio.src = song.url;
     audio.play().then(() => {
       isPlaying = true;
@@ -409,6 +412,23 @@
   }
 
   // 更新封面显示（动/静态）
+  function loadCoverForSong(song) {
+    // 优先使用自定义封面
+    const customCover = Storage.get('customCover', '');
+    if (customCover) {
+      dom.coverImgLarge.src = customCover;
+      dom.coverImgSmall.src = customCover;
+      return;
+    }
+    // 使用歌曲自带封面或默认封面
+    if (song && song.coverUrl) {
+      dom.coverImgLarge.src = song.coverUrl;
+      dom.coverImgSmall.src = song.coverUrl;
+    } else {
+      updateCoverDisplay();
+    }
+  }
+
   function updateCoverDisplay() {
     const animated = Storage.get('coverAnim', '1') === '1';
     dom.coverImgSmall.src = animated ? 'default_cover.gif' : 'default_cover_small_static.png';
@@ -423,6 +443,10 @@
     dom.progressThumb.style.left = pct + '%';
     dom.timeCurrent.textContent = formatTime(audio.currentTime);
     dom.timeTotal.textContent = formatTime(audio.duration);
+    // Mini player progress
+    if (dom.playerBarProgress) {
+      dom.playerBarProgress.style.width = pct + '%';
+    }
   }
 
   // ==================== 页面导航 ====================
@@ -619,6 +643,25 @@
     dom.searchStatus.style.display = 'flex';
     dom.searchResults.innerHTML = '';
 
+    // 通过 NativeBridge 发请求（绕过 WebView CORS 限制）
+    if (NativeBridge && typeof NativeBridge.searchOnline === 'function') {
+      window.onOnlineSearchResult = function(jsonStr) {
+        handleOnlineSearchResults(jsonStr);
+      };
+      window.onOnlineSearchError = function(msg) {
+        dom.searchResults.innerHTML = '<div class="empty-state"><p>搜索失败：' + escHtml(msg) + '</p><p style="margin-top:8px;font-size:12px;color:var(--text-muted)">请检查网络连接</p></div>';
+        dom.searchStatus.style.display = 'none';
+      };
+      try {
+        NativeBridge.searchOnline(query);
+      } catch (e) {
+        dom.searchStatus.style.display = 'none';
+        dom.searchResults.innerHTML = '<div class="empty-state"><p>搜索失败</p></div>';
+      }
+      return;
+    }
+
+    // Web fallback（浏览器测试用）
     try {
       const resp = await fetch('https://music.163.com/api/search/get/web?csrf_token=&hlpretag=&hlposttag=&s=' +
         encodeURIComponent(query) + '&type=1&offset=0&total=true&limit=30');
@@ -626,17 +669,28 @@
       if (!resp.ok) throw new Error('搜索失败');
 
       const data = await resp.json();
+      handleOnlineSearchResults(JSON.stringify(data));
+    } catch (e) {
+      dom.searchResults.innerHTML = '<div class="empty-state"><p>搜索失败：' + escHtml(e.message) + '</p><p style="margin-top:8px;font-size:12px;color:var(--text-muted)">请检查网络连接</p></div>';
+      dom.searchStatus.style.display = 'none';
+    }
+  }
+
+  function handleOnlineSearchResults(jsonStr) {
+    try {
+      const data = JSON.parse(jsonStr);
       const list = data.result && data.result.songs ? data.result.songs : [];
 
       if (list.length === 0) {
         dom.searchResults.innerHTML = '<div class="empty-state"><p>未找到相关歌曲</p></div>';
+        dom.searchStatus.style.display = 'none';
         return;
       }
 
+      dom.searchResults.innerHTML = '';
       list.forEach(song => {
         const artists = (song.artists || []).map(a => a.name).join(' / ');
         const album = song.album ? song.album.name : '';
-        const duration = song.duration || 0;
         const coverUrl = song.album && song.album.picUrl ? song.album.picUrl + '?param=100y100' : '';
 
         const item = document.createElement('div');
@@ -677,7 +731,7 @@
         dom.searchResults.appendChild(item);
       });
     } catch (e) {
-      dom.searchResults.innerHTML = '<div class="empty-state"><p>搜索失败：' + escHtml(e.message) + '</p><p style="margin-top:8px;font-size:12px;color:var(--text-muted)">请检查网络连接</p></div>';
+      dom.searchResults.innerHTML = '<div class="empty-state"><p>数据解析失败</p></div>';
     } finally {
       dom.searchStatus.style.display = 'none';
     }
@@ -708,44 +762,45 @@
     }
   }
 
-  async function downloadOnlineSong(song, btn) {
+  function downloadOnlineSong(song, btn) {
     btn.classList.add('downloading');
     btn.innerHTML = '<div class="search-spinner" style="width:12px;height:12px;border-width:1.5px;"></div> 下载中';
 
-    try {
-      const url = 'https://music.163.com/song/media/outer/url?id=' + song.id + '.mp3';
-      const resp = await fetch(url);
+    const artists = (song.artists || []).map(a => a.name).join(',');
+    const filename = encodeURIComponent(song.name + ' - ' + artists + '.mp3');
+    const url = 'https://music.163.com/song/media/outer/url?id=' + song.id + '.mp3';
 
-      if (!resp.ok) throw new Error('下载失败');
+    // 通过 NativeBridge 下载（绕过 CORS）
+    if (NativeBridge && typeof NativeBridge.downloadOnlineSong === 'function') {
+      window.onOnlineDownloadComplete = function(fname, path, size) {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已下载';
+        btn.classList.remove('downloading');
+        showToast('已下载：' + decodeURIComponent(fname));
+      };
+      window.onOnlineDownloadError = function(fname, msg) {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 下载';
+        btn.classList.remove('downloading');
+        showToast('下载失败：' + msg);
+      };
+      NativeBridge.downloadOnlineSong(url, filename);
+      return;
+    }
 
-      const blob = await resp.blob();
-      const artists = (song.artists || []).map(a => a.name).join(',');
-      const filename = song.name + ' - ' + artists + '.mp3';
-
-      // 通过 NativeBridge 保存到本地（如果有）
-      if (NativeBridge && typeof NativeBridge.saveDownloadedFile === 'function') {
-        const reader = new FileReader();
-        reader.onload = () => {
-          NativeBridge.saveDownloadedFile(filename, reader.result);
-          showToast('已下载：' + song.name);
-        };
-        reader.readAsDataURL(blob);
-      } else {
-        // Web fallback：创建下载链接
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
-        showToast('已下载：' + song.name);
-      }
-
+    // Web fallback
+    fetch(url).then(r => r.blob()).then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = decodeURIComponent(filename);
+      a.click();
+      URL.revokeObjectURL(a.href);
       btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已下载';
-    } catch (e) {
+      btn.classList.remove('downloading');
+      showToast('已下载');
+    }).catch(e => {
       btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 下载';
       btn.classList.remove('downloading');
       showToast('下载失败：' + e.message);
-    }
+    });
   }
 
   // ==================== 歌曲操作弹窗 ====================
@@ -1536,6 +1591,87 @@
       // 同步切换桌面图标
       if (NativeBridge && typeof NativeBridge.setDynamicIcon === 'function') {
         NativeBridge.setDynamicIcon(enabled);
+      }
+    });
+
+    // 自定义封面
+    const customCoverBtn = $('#setting-custom-cover');
+    const imageInput = $('#image-input');
+    const resetCoverBtn = $('#setting-reset-cover');
+
+    // 检查是否有自定义封面
+    const customCoverPath = Storage.get('customCover', '');
+    if (customCoverPath) {
+      dom.coverCustomDesc.textContent = '使用自定义封面';
+    }
+
+    customCoverBtn.addEventListener('click', () => {
+      imageInput.click();
+    });
+
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const dataUrl = evt.target.result;
+
+        // 设置播放器封面
+        const coverImg = document.getElementById('cover-img-large');
+        if (coverImg) coverImg.src = dataUrl;
+        const coverSmall = document.getElementById('cover-img-small');
+        if (coverSmall) coverSmall.src = dataUrl;
+
+        // 保存为自定义封面
+        Storage.set('customCover', dataUrl);
+        Storage.set('customCoverPath', 'base64');
+        dom.coverCustomDesc.textContent = '使用自定义封面';
+
+        // 通过 NativeBridge 生成桌面图标
+        if (NativeBridge && typeof NativeBridge.saveCoverImage === 'function') {
+          window.onCoverImageSaved = function(path) {
+            showToast('封面和桌面图标已更新');
+            // 启用动态图标（展示新图标）
+            if (NativeBridge && typeof NativeBridge.setDynamicIcon === 'function') {
+              NativeBridge.setDynamicIcon(true);
+            }
+            dom.toggleCoverAnim.checked = true;
+            dom.toggleCoverAnim.dispatchEvent(new Event('change'));
+          };
+          window.onCoverImageError = function(msg) {
+            showToast('图标生成失败：' + msg);
+          };
+          NativeBridge.saveCoverImage(dataUrl);
+        } else {
+          showToast('封面已更新');
+        }
+      };
+      reader.readAsDataURL(file);
+      // 重置 input 以允许重复选择同一文件
+      imageInput.value = '';
+    });
+
+    resetCoverBtn.addEventListener('click', () => {
+      Storage.remove('customCover');
+      Storage.remove('customCoverPath');
+      dom.coverCustomDesc.textContent = '使用默认封面';
+
+      // 恢复默认封面
+      loadCoverForSong(currentSong || {});
+      updateCoverDisplay();
+
+      // 重置桌面图标
+      if (NativeBridge && typeof NativeBridge.resetCover === 'function') {
+        window.onCoverImageReset = function() {
+          showToast('已恢复默认封面和图标');
+        };
+        window.onCoverImageError = function(msg) {
+          showToast('重置失败：' + msg);
+        };
+        NativeBridge.resetCover();
+      } else {
+        showToast('已恢复默认封面');
       }
     });
 
