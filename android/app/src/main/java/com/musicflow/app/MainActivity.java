@@ -531,7 +531,7 @@ public class MainActivity extends Activity {
                                 Integer.parseInt(parts[2]);
                         }
 
-                        boolean hasUpdate = remoteCode > getCurrentVersionCode();
+                        boolean hasUpdate = remoteCode > 0 && remoteCode > getCurrentVersionCode();
 
                         String downloadUrl = "";
                         long fileSize = 0;
