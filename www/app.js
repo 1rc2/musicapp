@@ -1272,6 +1272,21 @@
     scanBtn.disabled = false;
   };
 
+  // 扫描错误回调
+  window.onNativeScanError = function(msg) {
+    showToast('扫描失败: ' + msg);
+    const scanBtn = dom.btnScanMusic;
+    scanBtn.innerHTML = `
+      <div class="settings-item-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"/></svg>
+      </div>
+      <div class="settings-item-text">
+        <span class="settings-item-label">扫描本地音乐</span>
+        <span class="settings-item-desc">自动扫描手机中的音乐文件</span>
+      </div>`;
+    scanBtn.disabled = false;
+  };
+
   // Native Bridge 回调 - 接收导入文件
   window.onNativeFilesResult = function(resultJson) {
     try {
@@ -1303,6 +1318,10 @@
     } catch (e) {
       showToast('导入失败');
     }
+  };
+
+  window.onNativeFilesError = function(msg) {
+    showToast('导入失败: ' + msg);
   };
 
   // ==================== 内置浏览器 ====================

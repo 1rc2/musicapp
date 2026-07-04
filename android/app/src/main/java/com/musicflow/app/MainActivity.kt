@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.View
@@ -61,6 +62,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // 存储/音频权限（用于扫描本地音乐）
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val allGranted = results.all { it.value }
+        if (allGranted) {
+            scanLocalMusicInternal(null)
+        } else {
+            runOnUiThread {
+                callJs("if(window.onNativeScanError)onNativeScanError('需要存储权限才能扫描本地音乐')")
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -91,6 +106,15 @@ class MainActivity : ComponentActivity() {
             addJavascriptInterface(MusicBridge(), "NativeBridge")
             webChromeClient = WebChromeClient()
             webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    // 注入状态栏高度到 CSS 变量
+                    val sbh = getStatusBarHeight()
+                    view?.evaluateJavascript(
+                        "document.documentElement.style.setProperty('--safe-top', '${sbh}px')", null
+                    )
+                }
+
                 override fun shouldInterceptRequest(
                     view: WebView?,
                     request: android.webkit.WebResourceRequest?
@@ -103,12 +127,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContentView(webView)
-
-        // 注入状态栏高度到 CSS 变量（Android WebView 不支持 env(safe-area-inset-top)）
-        val statusBarHeight = getStatusBarHeight()
-        webView.evaluateJavascript(
-            "document.documentElement.style.setProperty('--safe-top', '${statusBarHeight}px')", null
-        )
 
         // 连接播放服务
         PlaybackService.instance?.onPlaybackEvent = { event, data ->
@@ -141,13 +159,21 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun scanLocalMusic() {
             scanCallback = null
-            scanLocalMusicInternal(null)
+            if (!hasStoragePermission()) {
+                requestStoragePermission()
+            } else {
+                scanLocalMusicInternal(null)
+            }
         }
 
         @JavascriptInterface
         fun scanLocalMusicWithCallback(callback: String) {
             scanCallback = callback
-            scanLocalMusicInternal(callback)
+            if (!hasStoragePermission()) {
+                requestStoragePermission()
+            } else {
+                scanLocalMusicInternal(callback)
+            }
         }
 
         private fun scanLocalMusicInternal(callback: String?) {
@@ -189,20 +215,25 @@ class MainActivity : ComponentActivity() {
                             val duration = cursor.getLong(durationCol)
                             if (duration < 30000) continue // 小于30秒跳过
 
+                            val mediaId = cursor.getLong(idCol)
                             val song = JSONObject().apply {
-                                put("id", cursor.getLong(idCol))
-                                put("name", cursor.getString(titleCol))
+                                put("id", mediaId)
+                                put("title", cursor.getString(titleCol))
                                 put("artist", cursor.getString(artistCol) ?: "未知艺术家")
                                 put("album", cursor.getString(albumCol) ?: "未知专辑")
                                 put("duration", duration)
-                                put("path", cursor.getString(dataCol))
+                                put("url", "https://musicflow.local/external/$mediaId")
+                                put("mediaId", mediaId)
                                 put("size", cursor.getLong(sizeCol))
                             }
                             songsArray.put(song)
                         }
                     }
 
-                    val json = songsArray.toString()
+                    val result = JSONObject().apply {
+                        put("songs", songsArray)
+                    }
+                    val json = result.toString()
                     val cb = callback ?: scanCallback
                     runOnUiThread {
                         if (cb != null) {
@@ -605,11 +636,55 @@ class MainActivity : ComponentActivity() {
         Thread {
             try {
                 val arr = JSONArray()
+                val musicDir = File(filesDir, "music")
+                if (!musicDir.exists()) musicDir.mkdirs()
+
                 for (uri in uris) {
-                    val song = readAudioMetadata(uri)
-                    if (song != null) arr.put(song)
+                    try {
+                        // 读取文件名
+                        val cr = contentResolver
+                        var fileName = "song_${System.currentTimeMillis()}.mp3"
+                        cr.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                            if (c.moveToFirst()) {
+                                val name = c.getString(0)
+                                if (name != null && name.isNotEmpty()) fileName = name
+                            }
+                        }
+
+                        // 复制到应用私有目录
+                        val destFile = File(musicDir, fileName)
+                        var counter = 1
+                        while (destFile.exists()) {
+                            val nameWithoutExt = fileName.substringBeforeLast(".")
+                            val ext = fileName.substringAfterLast(".", "")
+                            destFile.renameTo(File(musicDir, "${nameWithoutExt}_$counter.$ext"))
+                            counter++
+                        }
+                        cr.openInputStream(uri)?.use { input ->
+                            FileOutputStream(destFile).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+
+                        // 读取元数据
+                        val meta = readAudioMetadata(uri)
+                        val song = JSONObject().apply {
+                            put("title", meta?.optString("name") ?: fileName.substringBeforeLast("."))
+                            put("artist", meta?.optString("artist") ?: "未知艺术家")
+                            put("album", meta?.optString("album") ?: "未知专辑")
+                            put("duration", meta?.optLong("duration") ?: 0)
+                            put("url", "https://musicflow.local/music/${java.net.URLEncoder.encode(fileName, "UTF-8")}")
+                            put("path", destFile.absolutePath)
+                            put("size", destFile.length())
+                        }
+                        arr.put(song)
+                    } catch (_: Exception) {
+                        // skip failed files
+                    }
                 }
-                val json = arr.toString()
+
+                val result = JSONObject().apply { put("files", arr) }
+                val json = result.toString()
                 val cb = filePickerCallback
                 runOnUiThread {
                     if (cb != null) {
@@ -661,8 +736,30 @@ class MainActivity : ComponentActivity() {
         return if (resourceId > 0) {
             resources.getDimensionPixelSize(resourceId)
         } else {
-            // 默认 24dp（约等于大多数设备的状态栏高度）
             (24 * resources.displayMetrics.density).toInt()
+        }
+    }
+
+    // ==================== 权限检查 ====================
+
+    private fun hasStoragePermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestStoragePermission() {
+        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        runOnUiThread {
+            storagePermissionLauncher.launch(permissions)
         }
     }
 
@@ -834,6 +931,30 @@ class MainActivity : ComponentActivity() {
      */
     private fun interceptLocalRequest(url: String): WebResourceResponse? {
         try {
+            // 拦截外部存储音乐文件（通过 MediaStore ID）
+            if (url.startsWith("https://musicflow.local/external/")) {
+                val mediaIdStr = url.substring("https://musicflow.local/external/".length())
+                    .substringBefore("?").substringBefore("#")
+                val mediaId = mediaIdStr.toLongOrNull() ?: return null
+                val uri = android.net.Uri.withAppendedPath(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, mediaId.toString()
+                )
+                val cr = contentResolver
+                val fd = cr.openFileDescriptor(uri, "r") ?: return null
+                val fileSize = fd.statSize
+                val mimeType = cr.getType(uri) ?: "audio/mpeg"
+                val headers = mapOf(
+                    "Access-Control-Allow-Origin" to "*",
+                    "Content-Type" to mimeType,
+                    "Content-Length" to fileSize.toString(),
+                    "Accept-Ranges" to "bytes"
+                )
+                return WebResourceResponse(
+                    mimeType, "UTF-8", 200, "OK",
+                    headers, ParcelFileDescriptor.AutoCloseInputStream(fd)
+                )
+            }
+
             // 拦截本地音乐文件
             if (url.startsWith("https://musicflow.local/music/")) {
                 val fname = URLDecoder.decode(
