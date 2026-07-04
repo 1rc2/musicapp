@@ -1372,6 +1372,10 @@
       Storage.set('coverAnim', enabled ? '1' : '0');
       dom.coverAnimDesc.textContent = enabled ? '已开启' : '已关闭';
       updateCoverDisplay();
+      // 同步切换桌面图标
+      if (NativeBridge && typeof NativeBridge.setDynamicIcon === 'function') {
+        NativeBridge.setDynamicIcon(enabled);
+      }
     });
 
     // 检查更新
@@ -1585,6 +1589,10 @@
     dom.toggleCoverAnim.checked = coverAnim;
     dom.coverAnimDesc.textContent = coverAnim ? '已开启' : '已关闭';
     updateCoverDisplay();
+    // 同步桌面图标
+    if (NativeBridge && typeof NativeBridge.setDynamicIcon === 'function') {
+      NativeBridge.setDynamicIcon(coverAnim);
+    }
 
     // 恢复上次播放状态
     const lastSongId = Storage.get('lastSong');

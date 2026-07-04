@@ -1,10 +1,12 @@
 package com.musicflow.app;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -475,6 +477,22 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public int getAppVersionCode() {
             return getCurrentVersionCode();
+        }
+
+        @JavascriptInterface
+        public void setDynamicIcon(boolean dynamic) {
+            runOnUiThread(() -> {
+                int animState = dynamic ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                    : PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+                int staticState = dynamic ? PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                    : PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
+                getPackageManager().setComponentEnabledSetting(
+                    new ComponentName(MainActivity.this, "com.musicflow.app.MainActivityAnim"),
+                    animState, PackageManager.DONT_KILL_APP);
+                getPackageManager().setComponentEnabledSetting(
+                    new ComponentName(MainActivity.this, "com.musicflow.app.MainActivityStatic"),
+                    staticState, PackageManager.DONT_KILL_APP);
+            });
         }
 
         @JavascriptInterface
