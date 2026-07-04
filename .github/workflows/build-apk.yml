@@ -18,14 +18,7 @@ jobs:
           distribution: 'temurin'
           
       - name: Build APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleRelease 2>&1 | tee build.log
-        
-      - name: Save build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: android/build.log
+        run: cd android && chmod +x gradlew && ./gradlew assembleRelease 2>&1
           
       - name: List build output
         run: ls -la android/app/build/outputs/apk/release/
