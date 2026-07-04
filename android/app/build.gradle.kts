@@ -10,23 +10,14 @@ android {
         applicationId = "com.musicflow.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 10500
-        versionName = "1.5.0"
-    }
-
-    signingConfigs {
-        getByName("debug") {
-        }
+        versionCode = 10501
+        versionName = "1.5.1"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-        }
-        debug {
-            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
