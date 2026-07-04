@@ -8,8 +8,8 @@ android {
         applicationId = "com.musicflow.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 10407
-        versionName = "1.4.7"
+        versionCode = 10408
+        versionName = "1.4.8"
     }
 
     buildTypes {
@@ -32,11 +32,8 @@ android {
 }
 
 dependencies {
-    // AndroidX
     implementation "androidx.core:core:1.13.1"
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "androidx.activity:activity:1.9.0"
-
-    // WebView
     implementation "androidx.webkit:webkit:1.11.0"
 }

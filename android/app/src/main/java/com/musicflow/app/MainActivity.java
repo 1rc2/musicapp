@@ -827,9 +827,8 @@ public class MainActivity extends Activity {
         public void getOnlineSongUrlAsync(final String songId, final String callback) {
             new Thread(() -> {
                 String url = getOnlineSongUrlInternal(songId);
-                // jsString 已处理所有特殊字符转义
                 final String escaped = jsString(url);
-                callJs("if(window." + callback + ")" + callback + "(" + escaped + ")");
+                callJs("try{if(typeof window['" + callback + "']==='function')window['" + callback + "'](" + escaped + ")}catch(e){}");
             }).start();
         }
 

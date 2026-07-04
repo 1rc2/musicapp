@@ -8,5 +8,12 @@ buildscript {
     }
 }
 
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
 rootProject.name = "MusicFlow"
 include(":app")

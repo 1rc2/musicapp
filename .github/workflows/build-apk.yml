@@ -17,8 +17,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           
+      - name: Grant execute permission for gradlew
+        run: cd android && chmod +x gradlew
+        
       - name: Build APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleRelease 2>&1
+        run: cd android && ./gradlew assembleRelease --stacktrace --info 2>&1 | tee build.log
           
       - name: List build output
         run: ls -la android/app/build/outputs/apk/release/
