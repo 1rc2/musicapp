@@ -1341,6 +1341,14 @@ input {
   animation: spin 8s linear infinite;
 }
 
+.about-icon-img {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+  margin-bottom: 8px;
+}
+
 /* 扫描进度 */
 .scan-progress {
   padding: 16px;

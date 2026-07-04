@@ -162,6 +162,7 @@
     coverAnimDesc: $('#cover-anim-desc'),
     coverImgSmall: $('#cover-img-small'),
     coverImgLarge: $('#cover-img-large'),
+    aboutIconImg: $('#about-icon-img'),
     settingUpdateServer: $('#setting-update-server'),
     updateDesc: $('#update-desc'),
     updateServerDesc: $('#update-server-desc'),
@@ -407,6 +408,7 @@
     const animated = Storage.get('coverAnim', '1') === '1';
     dom.coverImgSmall.src = animated ? 'default_cover.gif' : 'default_cover_small_static.png';
     dom.coverImgLarge.src = animated ? 'default_cover.gif' : 'default_cover_static.png';
+    dom.aboutIconImg.src = animated ? 'default_cover.gif' : 'default_cover_static.png';
   }
 
   function updateProgress() {
