@@ -32,10 +32,12 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
 
 public class MainActivity extends Activity {
 
@@ -107,10 +109,59 @@ public class MainActivity extends Activity {
                     "window.__APP_VERSION__='" + getCurrentVersionName() + "';" +
                     "window.__APP_VERSION_CODE__=" + getCurrentVersionCode() + ";", null);
             }
+
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                return interceptMusicRequest(url);
+            }
+
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view, android.webkit.WebResourceRequest request) {
+                return interceptMusicRequest(request.getUrl().toString());
+            }
         });
 
         requestPermissions();
         webView.loadUrl("file:///android_asset/public/index.html");
+    }
+
+    private android.webkit.WebResourceResponse interceptMusicRequest(String url) {
+        // 拦截本地音乐文件请求，直接从私有目录返回
+        if (url != null && url.startsWith("https://musicflow.local/music/")) {
+            try {
+                String fname = url.substring("https://musicflow.local/music/".length());
+                // 正确 URL 解码文件名
+                fname = java.net.URLDecoder.decode(fname, "UTF-8");
+                File musicDir = new File(getFilesDir(), "music");
+                File file = new File(musicDir, fname);
+                if (file.exists() && file.canRead()) {
+                    InputStream is = new FileInputStream(file);
+                    java.util.Map<String, String> headers = new java.util.HashMap<>();
+                    headers.put("Access-Control-Allow-Origin", "*");
+                    headers.put("Content-Type", "audio/mpeg");
+                    headers.put("Content-Length", String.valueOf(file.length()));
+                    headers.put("Accept-Ranges", "bytes");
+                    return new android.webkit.WebResourceResponse(
+                        "audio/mpeg", "UTF-8", 200, "OK", headers, is);
+                }
+            } catch (Exception ignored) {}
+        }
+        // 拦截自定义封面图片
+        if (url != null && url.startsWith("https://musicflow.local/cover/")) {
+            try {
+                File coverFile = new File(getFilesDir(), "custom_cover/cover.png");
+                if (coverFile.exists() && coverFile.canRead()) {
+                    InputStream is = new FileInputStream(coverFile);
+                    java.util.Map<String, String> headers = new java.util.HashMap<>();
+                    headers.put("Access-Control-Allow-Origin", "*");
+                    headers.put("Content-Type", "image/png");
+                    headers.put("Content-Length", String.valueOf(coverFile.length()));
+                    return new android.webkit.WebResourceResponse(
+                        "image/png", "UTF-8", 200, "OK", headers, is);
+                }
+            } catch (Exception ignored) {}
+        }
+        return null;
     }
 
     private void requestPermissions() {
@@ -560,7 +611,7 @@ public class MainActivity extends Activity {
             new Thread(() -> {
                 HttpURLConnection conn = null;
                 try {
-                    callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('" + filename + "',0,0)");
+                    callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress(" + jsString(filename) + ",0,0)");
 
                     URL url = new URL(songUrl);
                     conn = (HttpURLConnection) url.openConnection();
@@ -572,9 +623,14 @@ public class MainActivity extends Activity {
                     int totalSize = conn.getContentLength();
                     InputStream is = conn.getInputStream();
 
+                    // 解码文件名，使用解码后的名称保存文件
+                    String decodedFilename = URLDecoder.decode(filename, "UTF-8");
+                    // 替换文件名中的非法字符
+                    decodedFilename = decodedFilename.replaceAll("[/\\\\:*?\"<>|]", "_");
+
                     File musicDir = new File(getFilesDir(), "music");
                     if (!musicDir.exists()) musicDir.mkdirs();
-                    File outFile = new File(musicDir, filename);
+                    File outFile = new File(musicDir, decodedFilename);
                     FileOutputStream fos = new FileOutputStream(outFile);
 
                     byte[] buffer = new byte[8192];
@@ -591,7 +647,7 @@ public class MainActivity extends Activity {
                             if (now - lastProgress > 300) {
                                 lastProgress = now;
                                 final int p = pct;
-                                callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('" + filename + "'," + p + "," + totalSize + ")");
+                                callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress(" + jsString(filename) + "," + p + "," + totalSize + ")");
                             }
                         }
                     }
@@ -601,17 +657,14 @@ public class MainActivity extends Activity {
 
                     final String path = outFile.getAbsolutePath();
                     final long size = outFile.length();
-                    // 生成 content:// URI 可播放链接
-                    String contentUri = "";
-                    try {
-                        contentUri = GenericFileProvider.getUriForFile(
-                            MainActivity.this,
-                            "com.musicflow.app.fileprovider",
-                            outFile).toString();
-                    } catch (Exception ignored) {}
+                    // 使用自定义 URL scheme，通过 shouldInterceptRequest 提供文件
+                    // 文件名需要 URL 编码以支持中文
+                    final String encodedName = java.net.URLEncoder.encode(decodedFilename, "UTF-8")
+                        .replace("+", "%20");
+                    final String playUrl = "https://musicflow.local/music/" + encodedName;
                     callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete(" +
                         jsString(filename) + "," + jsString(path) + "," + size + "," +
-                        jsString(contentUri) + ")");
+                        jsString(playUrl) + ")");
                 } catch (Exception e) {
                     callJs("if(window.onOnlineDownloadError)onOnlineDownloadError(" + jsString(filename) + "," + jsString(e.getMessage()) + ")");
                 } finally {
@@ -846,7 +899,7 @@ public class MainActivity extends Activity {
             }).start();
         }
 
-        }
+    }
 
     private void deleteDir(File dir) {
         if (dir == null || !dir.exists()) return;

@@ -191,6 +191,14 @@
     toggleRememberProgress: $('#toggle-remember-progress'),
     settingVolume: $('#setting-volume'),
     btnClearData: $('#btn-clear-data'),
+    // Playlist panel
+    btnPlaylist: $('#btn-playlist'),
+    playlistPanel: $('#playlist-panel'),
+    playlistPanelBackdrop: $('#playlist-panel-backdrop'),
+    btnClosePlaylist: $('#btn-close-playlist'),
+    btnClearQueue: $('#btn-clear-queue'),
+    playlistPanelList: $('#playlist-panel-list'),
+    playlistCount: $('#playlist-count'),
   };
 
   // ==================== 下载回调全局分发器 ====================
@@ -464,18 +472,17 @@
       }
     }
     _lastPlayingEl = newPlayingEl;
+
+    // 更新播放列表面板（如果打开）
+    if (isPlaylistPanelOpen) {
+      renderPlaylistPanel();
+    }
   }
 
   // 更新封面显示（动/静态）
   function loadCoverForSong(song) {
-    // 优先使用自定义封面
-    const customCover = Storage.get('customCover', '');
-    if (customCover) {
-      dom.coverImgLarge.src = customCover;
-      dom.coverImgSmall.src = customCover;
-      return;
-    }
-    // 使用歌曲自带封面或默认封面
+    // 播放器封面：优先使用歌曲自带封面，否则使用默认封面
+    // 自定义APP图标不影响播放器封面
     if (song && song.coverUrl) {
       dom.coverImgLarge.src = song.coverUrl;
       dom.coverImgSmall.src = song.coverUrl;
@@ -488,7 +495,13 @@
     const animated = Storage.get('coverAnim', '1') === '1';
     dom.coverImgSmall.src = animated ? 'default_cover.gif' : 'default_cover_small_static.png';
     dom.coverImgLarge.src = animated ? 'default_cover.gif' : 'default_cover_static.png';
-    dom.aboutIconImg.src = animated ? 'default_cover.gif' : 'default_cover_static.png';
+    // 关于页面图标：使用自定义APP图标或默认
+    const customAppIcon = Storage.get('customAppIcon', '');
+    if (customAppIcon) {
+      dom.aboutIconImg.src = customAppIcon;
+    } else {
+      dom.aboutIconImg.src = animated ? 'default_cover.gif' : 'default_cover_static.png';
+    }
   }
 
   function updateProgress() {
@@ -542,6 +555,74 @@
   }
 
   // ==================== 渲染函数 ====================
+  function buildQueueFromContext(context, clickedSong) {
+    // 根据上下文构建播放队列
+    let songList = [];
+    if (context === 'local') {
+      songList = songs.slice();
+    } else if (context === 'recent') {
+      songList = recentPlayed.map(id => songs.find(s => s.id === id)).filter(Boolean);
+    } else if (context === 'search') {
+      // 从搜索结果列表构建
+      const items = dom.searchResults.querySelectorAll('.song-item');
+      items.forEach(el => {
+        const id = el.dataset.id;
+        if (id && id.startsWith('online_')) {
+          // 在线歌曲需要特殊处理
+          const nameEl = el.querySelector('.song-name');
+          const metaEl = el.querySelector('.song-meta');
+          if (nameEl) {
+            songList.push({
+              id: id,
+              name: nameEl.textContent,
+              artist: metaEl ? metaEl.textContent.split(' · ')[0] : '未知艺术家',
+              url: 'https://music.163.com/song/media/outer/url?id=' + id.replace('online_', '') + '.mp3',
+              coverUrl: '',
+              duration: 0,
+              isOnline: true
+            });
+          }
+        } else {
+          const s = songs.find(s => s.id === id);
+          if (s) songList.push(s);
+        }
+      });
+    } else if (context.startsWith('playlist:')) {
+      const plId = context.split(':')[1];
+      if (plId === 'favorites') {
+        songList = favorites.map(id => songs.find(s => s.id === id)).filter(Boolean);
+      } else {
+        const pl = playlists.find(p => p.id === plId);
+        if (pl) {
+          songList = pl.songIds.map(id => songs.find(s => s.id === id)).filter(Boolean);
+        }
+      }
+    } else if (context === 'online') {
+      // 播放在线歌曲时，从搜索结果构建队列
+      const items = dom.searchResults.querySelectorAll('.song-item');
+      items.forEach(el => {
+        const id = el.dataset.id;
+        if (id && id.startsWith('online_')) {
+          const nameEl = el.querySelector('.song-name');
+          const metaEl = el.querySelector('.song-meta');
+          const coverImg = el.querySelector('.song-item-cover img');
+          if (nameEl) {
+            songList.push({
+              id: id,
+              name: nameEl.textContent,
+              artist: metaEl ? metaEl.textContent.split(' · ')[0] : '未知艺术家',
+              url: 'https://music.163.com/song/media/outer/url?id=' + id.replace('online_', '') + '.mp3',
+              coverUrl: coverImg ? coverImg.src : '',
+              duration: 0,
+              isOnline: true
+            });
+          }
+        }
+      });
+    }
+    return songList.length > 0 ? songList : null;
+  }
+
   function createSongItem(song, context = 'local') {
     const div = document.createElement('div');
     div.className = 'song-item';
@@ -569,7 +650,9 @@
     // 点击播放
     div.addEventListener('click', (e) => {
       if (e.target.closest('.btn-song-more')) return;
-      playSong(song);
+      // 从当前上下文构建播放队列
+      const queue = buildQueueFromContext(context, song);
+      playSong(song, queue);
     });
 
     // 长按/更多操作
@@ -668,6 +751,7 @@
   // ==================== 搜索 ====================
   let searchSource = 'online';
   let searchTimer = null;
+  let onlineSearchResults = []; // 存储在线搜索结果用于构建队列
 
   function renderSearch(query) {
     dom.searchResults.innerHTML = '';
@@ -740,6 +824,7 @@
     try {
       const data = JSON.parse(jsonStr);
       const list = data.result && data.result.songs ? data.result.songs : [];
+      onlineSearchResults = list; // 存储搜索结果
 
       if (list.length === 0) {
         dom.searchResults.innerHTML = '<div class="empty-state"><p>未找到相关歌曲</p></div>';
@@ -779,7 +864,24 @@
         // 点击播放
         item.addEventListener('click', (e) => {
           if (e.target.closest('.btn-download-song')) return;
-          playOnlineSong(song);
+          const onlineSong = playOnlineSong(song, true);
+          // 从在线搜索结果构建队列
+          const queue = onlineSearchResults.map(s => {
+            const a = (s.artists || []).map(x => x.name).join(' / ');
+            const cu = s.album && s.album.picUrl ? s.album.picUrl + '?param=400y400' : '';
+            return {
+              id: 'online_' + s.id,
+              name: s.name,
+              artist: a,
+              album: s.album ? s.album.name : '',
+              duration: s.duration || 0,
+              url: 'https://music.163.com/song/media/outer/url?id=' + s.id + '.mp3',
+              coverUrl: cu,
+              isOnline: true,
+              addedAt: Date.now()
+            };
+          });
+          playSong(onlineSong, queue);
         });
 
         // 下载按钮
@@ -797,7 +899,7 @@
     }
   }
 
-  function playOnlineSong(song) {
+  function playOnlineSong(song, returnOnly = false) {
     const artists = (song.artists || []).map(a => a.name).join(' / ');
     const coverUrl = song.album && song.album.picUrl ? song.album.picUrl + '?param=400y400' : '';
 
@@ -812,6 +914,10 @@
       isOnline: true,
       addedAt: Date.now()
     };
+
+    if (returnOnly) {
+      return onlineSong;
+    }
 
     playSong(onlineSong);
 
@@ -1291,6 +1397,15 @@
     dom.btnCollapsePlayer.addEventListener('click', collapsePlayer);
     dom.playerSongInfo.addEventListener('click', expandPlayer);
 
+    // 播放列表面板
+    dom.btnPlaylist.addEventListener('click', togglePlaylistPanel);
+    dom.btnClosePlaylist.addEventListener('click', closePlaylistPanel);
+    dom.playlistPanelBackdrop.addEventListener('click', closePlaylistPanel);
+    dom.btnClearQueue.addEventListener('click', () => {
+      if (currentQueue.length === 0) return;
+      clearQueue();
+    });
+
     // 匹配歌词
     dom.btnMatchLyric.addEventListener('click', async () => {
       if (!currentSong) return;
@@ -1653,15 +1768,16 @@
       }
     });
 
-    // 自定义封面
+    // 自定义APP图标
     const customCoverBtn = $('#setting-custom-cover');
     const imageInput = $('#image-input');
     const resetCoverBtn = $('#setting-reset-cover');
 
-    // 检查是否有自定义封面
-    const customCoverPath = Storage.get('customCover', '');
-    if (customCoverPath) {
-      dom.coverCustomDesc.textContent = '使用自定义封面';
+    // 检查是否有自定义APP图标
+    const customAppIcon = Storage.get('customAppIcon', '');
+    if (customAppIcon) {
+      dom.coverCustomDesc.textContent = '使用自定义图标';
+      dom.aboutIconImg.src = customAppIcon;
     }
 
     customCoverBtn.addEventListener('click', () => {
@@ -1676,21 +1792,17 @@
       reader.onload = (evt) => {
         const dataUrl = evt.target.result;
 
-        // 设置播放器封面
-        const coverImg = document.getElementById('cover-img-large');
-        if (coverImg) coverImg.src = dataUrl;
-        const coverSmall = document.getElementById('cover-img-small');
-        if (coverSmall) coverSmall.src = dataUrl;
+        // 保存为自定义APP图标（不影响播放器封面）
+        Storage.set('customAppIcon', dataUrl);
+        dom.coverCustomDesc.textContent = '使用自定义图标';
 
-        // 保存为自定义封面
-        Storage.set('customCover', dataUrl);
-        Storage.set('customCoverPath', 'base64');
-        dom.coverCustomDesc.textContent = '使用自定义封面';
+        // 更新关于页面图标
+        dom.aboutIconImg.src = dataUrl;
 
         // 通过 NativeBridge 生成桌面图标
         if (NativeBridge && typeof NativeBridge.saveCoverImage === 'function') {
           window.onCoverImageSaved = function(path) {
-            showToast('封面和桌面图标已更新');
+            showToast('APP图标已更新');
             // 启用动态图标（展示新图标）
             if (NativeBridge && typeof NativeBridge.setDynamicIcon === 'function') {
               NativeBridge.setDynamicIcon(true);
@@ -1703,7 +1815,7 @@
           };
           NativeBridge.saveCoverImage(dataUrl);
         } else {
-          showToast('封面已更新');
+          showToast('APP图标已更新');
         }
       };
       reader.readAsDataURL(file);
@@ -1712,25 +1824,23 @@
     });
 
     resetCoverBtn.addEventListener('click', () => {
-      Storage.remove('customCover');
-      Storage.remove('customCoverPath');
-      dom.coverCustomDesc.textContent = '使用默认封面';
+      Storage.remove('customAppIcon');
+      dom.coverCustomDesc.textContent = '使用默认图标';
 
-      // 恢复默认封面
-      loadCoverForSong(currentSong || {});
+      // 恢复默认图标（关于页面）
       updateCoverDisplay();
 
       // 重置桌面图标
       if (NativeBridge && typeof NativeBridge.resetCover === 'function') {
         window.onCoverImageReset = function() {
-          showToast('已恢复默认封面和图标');
+          showToast('已恢复默认图标');
         };
         window.onCoverImageError = function(msg) {
           showToast('重置失败：' + msg);
         };
         NativeBridge.resetCover();
       } else {
-        showToast('已恢复默认封面');
+        showToast('已恢复默认图标');
       }
     });
 
@@ -1918,6 +2028,8 @@
   function expandPlayer() {
     isExpanded = true;
     dom.expandedPlayer.classList.add('active');
+    // 打开展开播放器时关闭播放列表面板
+    if (isPlaylistPanelOpen) closePlaylistPanel();
     // 更新媒体会话
     if ('mediaSession' in navigator && currentSong) {
       navigator.mediaSession.metadata = new MediaMetadata({
@@ -1930,6 +2042,116 @@
   function collapsePlayer() {
     isExpanded = false;
     dom.expandedPlayer.classList.remove('active');
+  }
+
+  // ==================== 播放列表面板 ====================
+  let isPlaylistPanelOpen = false;
+
+  function openPlaylistPanel() {
+    isPlaylistPanelOpen = true;
+    renderPlaylistPanel();
+    dom.playlistPanel.classList.add('active');
+    dom.playlistPanelBackdrop.classList.add('active');
+  }
+
+  function closePlaylistPanel() {
+    isPlaylistPanelOpen = false;
+    dom.playlistPanel.classList.remove('active');
+    dom.playlistPanelBackdrop.classList.remove('active');
+  }
+
+  function togglePlaylistPanel() {
+    if (isPlaylistPanelOpen) {
+      closePlaylistPanel();
+    } else {
+      openPlaylistPanel();
+    }
+  }
+
+  function renderPlaylistPanel() {
+    const list = dom.playlistPanelList;
+    list.innerHTML = '';
+    dom.playlistCount.textContent = currentQueue.length;
+
+    if (currentQueue.length === 0) {
+      list.innerHTML = '<div class="empty-state" style="padding:40px 20px;"><p>播放列表为空</p></div>';
+      return;
+    }
+
+    currentQueue.forEach((song, idx) => {
+      const isCurrent = currentSong && song.id === currentSong.id;
+      const item = document.createElement('div');
+      item.className = 'queue-item' + (isCurrent ? ' current' : '');
+      item.innerHTML = `
+        <div class="queue-item-index">${isCurrent && isPlaying ?
+          '<div class="queue-item-playing"><span></span><span></span><span></span></div>' :
+          (idx + 1)}</div>
+        <div class="queue-item-info">
+          <div class="queue-item-name">${escHtml(song.name)}</div>
+          <div class="queue-item-artist">${escHtml(song.artist || '未知艺术家')}</div>
+        </div>
+        <button class="queue-item-remove" title="移除" data-idx="${idx}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      `;
+
+      // 点击播放该歌曲
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.queue-item-remove')) return;
+        currentSongIndex = idx;
+        playSong(song);
+        renderPlaylistPanel(); // 更新当前播放指示
+      });
+
+      // 移除按钮
+      item.querySelector('.queue-item-remove').addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeFromQueue(idx);
+      });
+
+      list.appendChild(item);
+    });
+  }
+
+  function removeFromQueue(idx) {
+    if (idx < 0 || idx >= currentQueue.length) return;
+    const removed = currentQueue.splice(idx, 1)[0];
+    if (currentQueue.length === 0) {
+      // 队列为空，停止播放
+      audio.pause();
+      currentSong = null;
+      isPlaying = false;
+      currentSongIndex = -1;
+      updatePlayUI();
+      closePlaylistPanel();
+      showToast('播放列表已清空');
+      return;
+    }
+    // 调整当前播放索引
+    if (idx < currentSongIndex) {
+      currentSongIndex--;
+    } else if (idx === currentSongIndex) {
+      // 移除了正在播放的歌曲，播放下一首
+      currentSongIndex = currentSongIndex % currentQueue.length;
+      playSong(currentQueue[currentSongIndex]);
+    }
+    renderPlaylistPanel();
+  }
+
+  function clearQueue() {
+    // 清空队列但保留当前播放的歌曲
+    if (currentSong) {
+      currentQueue = [currentSong];
+      currentSongIndex = 0;
+    } else {
+      currentQueue = [];
+      currentSongIndex = -1;
+      audio.pause();
+      isPlaying = false;
+    }
+    updatePlayUI();
+    renderPlaylistPanel();
+    showToast('已清空播放列表');
   }
 
   // ==================== 初始化 ====================

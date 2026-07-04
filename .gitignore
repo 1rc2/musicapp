@@ -9,6 +9,8 @@ gen/
 .gradle/
 *.keystore
 *.apk
+*.idsig
+*.apk.idsig
 
 # Capacitor
 android/app/src/main/assets/
@@ -25,6 +27,7 @@ Thumbs.db
 # Temp
 *.tmp
 *.log
+.uploads/
 
 # Package manager
 package-lock.json
