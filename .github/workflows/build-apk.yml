@@ -21,14 +21,20 @@ jobs:
         run: cd android && chmod +x gradlew
         
       - name: Build APK
-        run: cd android && ./gradlew assembleRelease --stacktrace --info 2>&1 | tee build.log
+        run: cd android && ./gradlew assembleRelease --stacktrace 2>&1
           
-      - name: List build output
-        run: ls -la android/app/build/outputs/apk/release/
+      - name: List all build outputs
+        run: |
+          echo "=== Listing build/outputs directory ==="
+          ls -la android/app/build/outputs/ || echo "outputs dir not found"
+          echo "=== Listing apk directory ==="
+          ls -laR android/app/build/outputs/apk/ || echo "apk dir not found"
+          echo "=== Finding all APK files ==="
+          find android/app/build -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
         
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/*.apk
+          files: android/app/build/outputs/apk/**/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
