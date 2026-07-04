@@ -19,6 +19,7 @@ import android.util.Base64;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -40,8 +41,10 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private static final int FILE_CHOOSER_REQ = 1001;
+    private static final int WEBVIEW_FILE_REQ = 1002;
     private static final int PERMISSION_REQ = 2001;
     private static final int INSTALL_REQ = 3001;
+    public static ValueCallback<Uri[]> filePathCallback;
 
     /** 运行时读取 APK 版本号（不硬编码，避免每次发版忘记同步） */
     private int getCurrentVersionCode() {
@@ -86,7 +89,16 @@ public class MainActivity extends Activity {
         settings.setAllowUniversalAccessFromFileURLs(false);
 
         webView.addJavascriptInterface(new MusicBridge(), "NativeBridge");
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView wv, ValueCallback<Uri[]> filePathCallback, FileChooserParams params) {
+                MainActivity.filePathCallback = filePathCallback;
+                Intent intent = params.createIntent();
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                startActivityForResult(Intent.createChooser(intent, "选择文件"), WEBVIEW_FILE_REQ);
+                return true;
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
@@ -146,6 +158,24 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == FILE_CHOOSER_REQ && resultCode == RESULT_OK && data != null) {
             handleFileResult(data);
+        } else if (requestCode == WEBVIEW_FILE_REQ) {
+            ValueCallback<Uri[]> cb = MainActivity.filePathCallback;
+            if (cb != null) {
+                Uri[] results = null;
+                if (resultCode == RESULT_OK && data != null) {
+                    if (data.getData() != null) {
+                        results = new Uri[]{data.getData()};
+                    } else if (data.getClipData() != null) {
+                        int count = data.getClipData().getItemCount();
+                        results = new Uri[count];
+                        for (int i = 0; i < count; i++) {
+                            results[i] = data.getClipData().getItemAt(i).getUri();
+                        }
+                    }
+                }
+                cb.onReceiveValue(results);
+                MainActivity.filePathCallback = null;
+            }
         }
     }
 
