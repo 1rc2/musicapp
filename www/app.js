@@ -283,6 +283,13 @@
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
 
+  function formatFileSize(bytes) {
+    if (!bytes || bytes <= 0) return '未知';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
   function createObjectURL(blob) {
     return URL.createObjectURL(blob);
   }
@@ -1902,40 +1909,37 @@
     dom.btnCheckUpdate.addEventListener('click', () => {
       // 隐藏 badge，开始检查
       dom.updateBadge.style.display = 'none';
-      if (updateServer === 'local') {
-        checkLocalUpdate();
-      } else {
-        checkRemoteUpdate();
-      }
+      checkUpdate();
     });
 
-    async function checkLocalUpdate() {
-      if (!NativeBridge) {
-        showToast('本地更新仅支持安卓版');
-        return;
-      }
-      dom.updateStatus.innerHTML = '<div class="spinner" style="width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div><p class="update-downloading">正在检查本地 APK...</p>';
+    async function checkUpdate() {
+      dom.updateStatus.innerHTML = '<div class="spinner" style="width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div><p class="update-downloading">正在检查更新...</p>';
       dom.updateActions.style.display = 'none';
       dom.updateCloseActions.style.display = 'none';
+      dom.updateFallbackActions.style.display = 'none';
       openModal(dom.modalUpdate);
 
-      // 调用原生 bridge 检查更新
-      NativeBridge.checkLocalUpdate();
+      if (NativeBridge && typeof NativeBridge.checkRemoteUpdate === 'function') {
+        const serverUrl = updateServers[updateServer]?.url || '';
+        NativeBridge.checkRemoteUpdate(serverUrl);
+      } else {
+        dom.updateStatus.innerHTML = '<p class="update-error">仅在 APP 内可用</p>';
+        dom.updateCloseActions.style.display = 'flex';
+      }
     }
 
-    // 本地更新回调 - 由原生调用
-    window.onLocalUpdateCheckResult = function(resultJson) {
+    // 远程更新检查结果回调 - 由原生调用
+    window.onRemoteUpdateCheckResult = function(result) {
       try {
-        const result = JSON.parse(resultJson);
         if (result.hasUpdate) {
-          // 显示新版本 badge
           dom.updateBadge.style.display = 'inline';
-          dom.updateDesc.textContent = '发现新版本 v' + result.newVersion;
+          dom.updateDesc.textContent = '发现新版本 v' + result.remoteVersion;
 
+          const sizeStr = result.fileSize > 0 ? formatFileSize(result.fileSize) : '未知';
           dom.updateStatus.innerHTML = `
-            <div class="update-version">发现新版本 v${result.newVersion}</div>
+            <div class="update-version">发现新版本 v${result.remoteVersion}</div>
             <p>当前版本: v${APP_VERSION}</p>
-            <p style="margin-top:8px;">新版本大小: ${result.fileSize}</p>
+            <p style="margin-top:8px;">新版本大小: ${sizeStr}</p>
             <div class="update-changelog">${result.changelog || '暂无更新说明'}</div>
             <div class="update-progress-bar" id="download-progress-bar" style="display:none;">
               <div class="update-progress-fill" id="download-progress-fill"></div>
@@ -1946,14 +1950,15 @@
           dom.updateCloseActions.style.display = 'none';
           updateInfo = result;
           dom.btnConfirmUpdate.textContent = '下载更新';
+          dom.btnConfirmUpdate.disabled = false;
 
           dom.btnConfirmUpdate.onclick = () => {
-            startLocalDownload(result);
+            startRemoteDownload(result);
           };
         } else {
-          // 无新版本 → toast 提示
+          dom.updateStatus.innerHTML = '<p class="update-latest">当前已是最新版本 v' + APP_VERSION + '</p>';
+          dom.updateCloseActions.style.display = 'flex';
           showToast('当前已是最新版本 v' + APP_VERSION);
-          closeModal(dom.modalUpdate);
         }
       } catch (e) {
         showToast('检查更新失败: ' + e.message);
@@ -1961,7 +1966,12 @@
       }
     };
 
-    function startLocalDownload(info) {
+    window.onRemoteUpdateCheckError = function(msg) {
+      dom.updateStatus.innerHTML = `<p class="update-error">检查失败: ${escHtml(msg)}</p>`;
+      dom.updateCloseActions.style.display = 'flex';
+    };
+
+    function startRemoteDownload(info) {
       // 重置超时检测
       lastDownloadProgress = -1;
       if (downloadStuckTimer) { clearTimeout(downloadStuckTimer); downloadStuckTimer = null; }
@@ -1972,13 +1982,8 @@
       dom.btnConfirmUpdate.disabled = true;
       dom.btnCancelUpdate.style.display = 'none';
 
-      // 调用原生下载（远程 or 本地）
-      if (NativeBridge) {
-        if (info.downloadUrl) {
-          NativeBridge.startRemoteDownload(info.downloadUrl);
-        } else {
-          NativeBridge.startLocalUpdate();
-        }
+      if (NativeBridge && info.downloadUrl) {
+        NativeBridge.startRemoteDownload(info.downloadUrl);
       }
     }
 
@@ -2033,26 +2038,6 @@
         }, 15000); // 15 秒没进度变化认为卡住
       } catch (e) {}
     };
-
-    async function checkRemoteUpdate() {
-      dom.updateStatus.innerHTML = '<div class="spinner" style="width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div><p class="update-downloading">正在检查更新...</p>';
-      dom.updateActions.style.display = 'none';
-      dom.updateCloseActions.style.display = 'none';
-      openModal(dom.modalUpdate);
-
-      try {
-        // 通过原生 bridge 下载更新信息文件
-        if (NativeBridge) {
-          NativeBridge.checkRemoteUpdate(updateServers[updateServer].url);
-        } else {
-          dom.updateStatus.innerHTML = '<p class="update-error">仅在 APP 内可用</p>';
-          dom.updateCloseActions.style.display = 'flex';
-        }
-      } catch (e) {
-        dom.updateStatus.innerHTML = `<p class="update-error">检查失败: ${e.message}</p>`;
-        dom.updateCloseActions.style.display = 'flex';
-      }
-    }
 
     // 关闭更新弹窗
     dom.btnCancelUpdate.addEventListener('click', () => closeModal(dom.modalUpdate));
