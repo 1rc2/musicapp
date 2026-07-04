@@ -12,23 +12,12 @@ android {
         versionName = "1.4.2"
     }
 
-    signingConfigs {
-        release {
-            storeFile = file("debug.keystore")
-            storePassword = "musicflow123"
-            keyAlias = "musicflow"
-            keyPassword = "musicflow123"
-        }
-    }
-
     buildTypes {
         release {
             minifyEnabled = false
-            signingConfig = signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            signingConfig = signingConfigs.release
         }
     }
 
