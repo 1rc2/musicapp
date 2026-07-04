@@ -556,12 +556,6 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void getCoverImage(String songUrl) {
-            // TODO: implement cover image retrieval
-            callJs("if(window.onCoverImageResult)onCoverImageResult('')");
-        }
-
-        @JavascriptInterface
         public void downloadOnlineSong(String songUrl, String filename) {
             new Thread(() -> {
                 HttpURLConnection conn = null;
@@ -842,60 +836,7 @@ public class MainActivity extends Activity {
             }).start();
         }
 
-        private void downloadApkFromUrl(String downloadUrl) {
-            HttpURLConnection conn = null;
-            try {
-                callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('0')");
-
-                URL url = new URL(downloadUrl);
-                conn = (HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(30000);
-                conn.setReadTimeout(30000);
-                conn.setInstanceFollowRedirects(true);
-
-                int totalSize = conn.getContentLength();
-                InputStream is = conn.getInputStream();
-
-                File outFile = new File(getUpdateDir(), "MusicFlow_update.apk");
-                FileOutputStream fos = new FileOutputStream(outFile);
-
-                byte[] buffer = new byte[8192];
-                int total = 0;
-                int len;
-                long lastProgress = 0;
-
-                while ((len = is.read(buffer)) != -1) {
-                    fos.write(buffer, 0, len);
-                    total += len;
-                    if (totalSize > 0) {
-                        int progress = Math.min(99, (int) ((total * 100) / totalSize));
-                        long now = System.currentTimeMillis();
-                        if (now - lastProgress > 500) {
-                            lastProgress = now;
-                            final int p = progress;
-                            callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('" + p + "')");
-                        }
-                    }
-                }
-
-                fos.close();
-                is.close();
-
-                callJs("if(window.onUpdateDownloadProgress)onUpdateDownloadProgress('100')");
-
-                final String path = outFile.getAbsolutePath();
-                callJs("if(window.onUpdateDownloadComplete)onUpdateDownloadComplete(" + jsString(path) + ")");
-
-                Thread.sleep(500);
-                installApk(path);
-
-            } catch (Exception e) {
-                callJs("if(window.onUpdateDownloadError)onUpdateDownloadError(" + jsString("下载失败: " + (e.getMessage() != null ? e.getMessage() : "")) + ")");
-            } finally {
-                if (conn != null) conn.disconnect();
-            }
         }
-    }
 
     private void deleteDir(File dir) {
         if (dir == null || !dir.exists()) return;

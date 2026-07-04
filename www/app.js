@@ -193,6 +193,61 @@
     btnClearData: $('#btn-clear-data'),
   };
 
+  // ==================== 下载回调全局分发器 ====================
+  // 解决并发下载回调覆盖问题：Java 端以 filename 为标识回调
+  // 全局分发器根据 filename 查找到对应的按钮和歌曲信息
+  window._dlCallbacks = {};
+
+  window.onOnlineDownloadComplete = function(fname, path, size) {
+    try {
+      const key = 'dl_' + fname;
+      const ctx = window._dlCallbacks[key];
+      if (!ctx) return;
+      const btn = ctx.btn, song = ctx.song, artists = ctx.artists;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已下载';
+      btn.classList.remove('downloading');
+      const decodedName = decodeURIComponent(fname);
+      const nameParts = decodedName.replace('.mp3','').split(' - ');
+      const coverUrl = song.album && song.album.picUrl ? song.album.picUrl + '?param=100y100' : '';
+      const newSong = {
+        id: 'dl_' + Date.now() + '_' + Math.random().toString(36).substr(2,6),
+        name: nameParts[0] || decodedName.replace('.mp3',''),
+        artist: nameParts.slice(1).join(' - ') || artists,
+        album: song.album ? song.album.name : '',
+        duration: song.duration || 0,
+        url: 'file://' + path,
+        coverUrl: coverUrl,
+        addedAt: Date.now()
+      };
+      songs.push(newSong);
+      saveAll();
+      renderLocal();
+      showToast('已下载到本地音乐：' + newSong.name);
+      delete window._dlCallbacks[key];
+    } catch(e) {}
+  };
+
+  window.onOnlineDownloadError = function(fname, msg) {
+    try {
+      const key = 'dl_' + fname;
+      const ctx = window._dlCallbacks[key];
+      if (!ctx) return;
+      ctx.btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 下载';
+      ctx.btn.classList.remove('downloading');
+      showToast('下载失败：' + msg);
+      delete window._dlCallbacks[key];
+    } catch(e) {}
+  };
+
+  window.onOnlineDownloadProgress = function(fname, pct, total) {
+    try {
+      const key = 'dl_' + fname;
+      const ctx = window._dlCallbacks[key];
+      if (!ctx || pct <= 0 || pct >= 100) return;
+      ctx.btn.innerHTML = '<div class="search-spinner" style="width:12px;height:12px;border-width:1.5px;"></div> ' + pct + '%';
+    } catch(e) {}
+  };
+
   // ==================== Toast ====================
   let toastTimer = null;
   function showToast(msg) {
@@ -523,7 +578,7 @@
       showSongActions(song, context);
     });
 
-    if (isPlaying) div.classList.add('playing');
+    if (isCurrentSong && isPlaying) div.classList.add('playing');
 
     return div;
   }
@@ -645,10 +700,15 @@
 
     // 通过 NativeBridge 发请求（绕过 WebView CORS 限制）
     if (NativeBridge && typeof NativeBridge.searchOnline === 'function') {
+      // 使用搜索序号防止结果覆盖（快速输入时只接受最后一次搜索的结果）
+      const seq = Date.now();
+      window._searchSeq = seq;
       window.onOnlineSearchResult = function(jsonStr) {
+        if (window._searchSeq !== seq) return; // 过期结果丢弃
         handleOnlineSearchResults(jsonStr);
       };
       window.onOnlineSearchError = function(msg) {
+        if (window._searchSeq !== seq) return;
         dom.searchResults.innerHTML = '<div class="empty-state"><p>搜索失败：' + escHtml(msg) + '</p><p style="margin-top:8px;font-size:12px;color:var(--text-muted)">请检查网络连接</p></div>';
         dom.searchStatus.style.display = 'none';
       };
@@ -772,32 +832,14 @@
 
     // 通过 NativeBridge 下载（绕过 CORS）
     if (NativeBridge && typeof NativeBridge.downloadOnlineSong === 'function') {
-      window.onOnlineDownloadComplete = function(fname, path, size) {
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已下载';
-        btn.classList.remove('downloading');
-        // 添加到本地歌曲列表
-        const decodedName = decodeURIComponent(fname);
-        const nameParts = decodedName.replace('.mp3','').split(' - ');
-        const coverUrl = song.album && song.album.picUrl ? song.album.picUrl + '?param=100y100' : '';
-        const newSong = {
-          id: 'dl_' + Date.now() + '_' + Math.random().toString(36).substr(2,6),
-          name: nameParts[0] || decodedName.replace('.mp3',''),
-          artist: nameParts.slice(1).join(' - ') || artists,
-          album: song.album ? song.album.name : '',
-          duration: song.duration || 0,
-          url: 'file://' + path,
-          coverUrl: coverUrl,
-          addedAt: Date.now()
-        };
-        songs.push(newSong);
-        saveAll();
-        renderLocal();
-        showToast('已下载到本地音乐：' + newSong.name);
-      };
-      window.onOnlineDownloadError = function(fname, msg) {
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 下载';
-        btn.classList.remove('downloading');
-        showToast('下载失败：' + msg);
+      // 使用 filename 映射来解决并发覆盖问题
+      const dlKey = 'dl_' + filename;
+      btn.dataset.dlKey = dlKey;
+      if (!window._dlCallbacks) window._dlCallbacks = {};
+      window._dlCallbacks[dlKey] = {
+        btn: btn,
+        song: song,
+        artists: artists
       };
       NativeBridge.downloadOnlineSong(url, filename);
       return;
@@ -1838,6 +1880,9 @@
         // 通过原生 bridge 下载更新信息文件
         if (NativeBridge) {
           NativeBridge.checkRemoteUpdate(updateServers[updateServer].url);
+        } else {
+          dom.updateStatus.innerHTML = '<p class="update-error">仅在 APP 内可用</p>';
+          dom.updateCloseActions.style.display = 'flex';
         }
       } catch (e) {
         dom.updateStatus.innerHTML = `<p class="update-error">检查失败: ${e.message}</p>`;

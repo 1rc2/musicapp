@@ -31,6 +31,8 @@ public class GenericFileProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
+        // 预初始化路径映射，避免后续无 Context 调用时 NPE
+        ensurePathsInitialized(getContext());
         return true;
     }
 
@@ -40,6 +42,7 @@ public class GenericFileProvider extends ContentProvider {
      */
     private static synchronized void ensurePathsInitialized(Context context) {
         if (!sPathMap.isEmpty()) return;
+        if (context == null) return;
         // external-path → Environment.getExternalStorageDirectory()
         File externalDir = android.os.Environment.getExternalStorageDirectory();
         sPathMap.put("external-path", externalDir);
