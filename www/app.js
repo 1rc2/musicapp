@@ -53,6 +53,36 @@
   const audio = new Audio();
   audio.volume = volume / 100;
 
+  // 播放错误处理：在线歌曲播放失败时尝试获取真实 URL 重试
+  let _onlineRetryMap = {};
+  audio.addEventListener('error', () => {
+    if (!currentSong || !currentSong.isOnline) return;
+    const songId = currentSong.id.replace('online_', '');
+    if (_onlineRetryMap[songId]) {
+      // 已经重试失败
+      showToast('播放失败：该歌曲可能暂无版权');
+      _onlineRetryMap[songId] = false;
+      return;
+    }
+    if (NativeBridge && typeof NativeBridge.getOnlineSongUrl === 'function') {
+      try {
+        _onlineRetryMap[songId] = true;
+        const realUrl = NativeBridge.getOnlineSongUrl(songId);
+        if (realUrl && realUrl.length > 0) {
+          currentSong.url = realUrl;
+          // 更新队列中的 URL
+          if (currentQueue && currentQueue[currentSongIndex]) {
+            currentQueue[currentSongIndex].url = realUrl;
+          }
+          audio.src = realUrl;
+          audio.play().catch(() => {});
+          return;
+        }
+      } catch (e) {}
+    }
+    showToast('播放失败');
+  });
+
   let currentSong = null;
   let currentSongIndex = -1;
   let currentQueue = []; // 当前播放队列
@@ -972,6 +1002,18 @@
 
     if (returnOnly) {
       return onlineSong;
+    }
+
+    // 通过 NativeBridge 获取真实播放地址（解决 outer/url 接口失效问题）
+    if (NativeBridge && typeof NativeBridge.getOnlineSongUrl === 'function') {
+      try {
+        const realUrl = NativeBridge.getOnlineSongUrl(String(song.id));
+        if (realUrl && realUrl.length > 0) {
+          onlineSong.url = realUrl;
+        }
+      } catch (e) {
+        // 失败则用默认 URL
+      }
     }
 
     playSong(onlineSong);

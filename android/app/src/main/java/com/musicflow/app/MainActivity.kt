@@ -392,6 +392,37 @@ class MainActivity : ComponentActivity() {
             }.start()
         }
 
+        // ==================== 获取在线歌曲真实地址 ====================
+
+        @JavascriptInterface
+        fun getOnlineSongUrl(songId: String): String {
+            return try {
+                val apiUrl = "https://music.163.com/api/song/url?id=$songId"
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                val req = okhttp3.Request.Builder()
+                    .url(apiUrl)
+                    .header("Referer", "https://music.163.com")
+                    .header("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1")
+                    .build()
+                client.newCall(req).execute().use { resp ->
+                    val body = resp.body?.string() ?: ""
+                    val json = JSONObject(body)
+                    val dataArr = json.optJSONArray("data")
+                    if (dataArr != null && dataArr.length() > 0) {
+                        val songObj = dataArr.getJSONObject(0)
+                        val u = songObj.optString("url")
+                        if (u != null && u.isNotEmpty() && u != "null") return u
+                    }
+                }
+                ""
+            } catch (e: Exception) {
+                ""
+            }
+        }
+
         // ==================== 在线歌曲下载 ====================
 
         @JavascriptInterface
@@ -403,20 +434,64 @@ class MainActivity : ComponentActivity() {
                     if (!musicDir.exists()) musicDir.mkdirs()
                     val file = File(musicDir, decodedName)
 
-                    // 使用 OkHttp 自动跟随重定向（支持 HTTPS→HTTP 跨协议）
+                    // 从 URL 中提取歌曲 ID
+                    val songId = extractSongId(url)
+                    var realUrl = url
+
+                    // 如果是网易云 outer/url 接口，先调用 song/url 获取真实地址
+                    if (songId != null && url.contains("music.163.com")) {
+                        val apiUrl = "https://music.163.com/api/song/url?id=$songId"
+                        try {
+                            val apiClient = okhttp3.OkHttpClient.Builder()
+                                .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                                .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                                .build()
+                            val apiReq = okhttp3.Request.Builder()
+                                .url(apiUrl)
+                                .header("Referer", "https://music.163.com")
+                                .header("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1")
+                                .build()
+                            apiClient.newCall(apiReq).execute().use { resp ->
+                                val body = resp.body?.string() ?: ""
+                                val json = JSONObject(body)
+                                val dataArr = json.optJSONArray("data")
+                                if (dataArr != null && dataArr.length() > 0) {
+                                    val songObj = dataArr.getJSONObject(0)
+                                    val u = songObj.optString("url")
+                                    if (u != null && u.isNotEmpty() && u != "null") {
+                                        realUrl = u
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {
+                            // 获取真实地址失败，继续用原始 URL 尝试
+                        }
+                    }
+
+                    // 使用 OkHttp 下载
                     val client = okhttp3.OkHttpClient.Builder()
                         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
                         .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                         .followRedirects(true)
                         .followSslRedirects(true)
+                        .addNetworkInterceptor { chain ->
+                            val original = chain.request()
+                            val request = original.newBuilder()
+                                .header("Referer", "https://music.163.com")
+                                .header("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1")
+                                .header("Accept", "audio/webm,audio/ogg,audio/wav,audio/mpeg,audio/mp3;q=0.9,*/*;q=0.8")
+                                .header("Accept-Language", "zh-CN,zh;q=0.9")
+                                .build()
+                            chain.proceed(request)
+                        }
                         .build()
 
                     val request = okhttp3.Request.Builder()
-                        .url(url)
+                        .url(realUrl)
                         .header("Referer", "https://music.163.com")
-                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                        .header("Accept", "*/*")
-                        .header("Range", "bytes=0-")
+                        .header("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1")
+                        .header("Accept", "audio/webm,audio/ogg,audio/wav,audio/mpeg,audio/mp3;q=0.9,*/*;q=0.8")
+                        .header("Accept-Language", "zh-CN,zh;q=0.9")
                         .build()
 
                     client.newCall(request).execute().use { response ->
@@ -491,20 +566,19 @@ class MainActivity : ComponentActivity() {
                             return@Thread
                         }
 
-                        // 获取 contentUri 供前端播放
-                        val contentUri = FileProvider.getUriForFile(
-                            this@MainActivity,
-                            "$packageName.fileprovider",
-                            file
-                        )
+                        // 使用虚拟 URL 供 WebView 拦截播放（content:// WebView 无法直接播放）
+                        val encodedName = java.net.URLEncoder.encode(decodedName, "UTF-8")
+                        val localUrl = "https://musicflow.local/music/$encodedName"
 
                         runOnUiThread {
-                            callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete('$filename','${file.absolutePath}',${file.length()},'$contentUri')")
+                            callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete('$filename','${file.absolutePath}',${file.length()},'$localUrl')")
                         }
                     }
                 } catch (e: Exception) {
+                    val errorMsg = e.message ?: "下载失败"
+                    val fullMsg = if (e.cause != null) "$errorMsg (${e.cause?.message})" else errorMsg
                     runOnUiThread {
-                        callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','${e.message?.replace("'", "\\'") ?: "下载失败"}')")
+                        callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','${fullMsg.replace("'", "\\'")}')")
                     }
                 }
             }.start()
@@ -738,6 +812,21 @@ class MainActivity : ComponentActivity() {
         } else {
             (24 * resources.displayMetrics.density).toInt()
         }
+    }
+
+    private fun extractSongId(url: String): String? {
+        return try {
+            val patterns = listOf(
+                "id=(\\d+)".toRegex(),
+                "/song/(\\d+)".toRegex(),
+                "/(\\d+)\\.mp3".toRegex()
+            )
+            for (pattern in patterns) {
+                val match = pattern.find(url)
+                if (match != null) return match.groupValues[1]
+            }
+            null
+        } catch (_: Exception) { null }
     }
 
     // ==================== 权限检查 ====================
