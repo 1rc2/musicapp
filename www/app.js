@@ -775,7 +775,24 @@
       window.onOnlineDownloadComplete = function(fname, path, size) {
         btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已下载';
         btn.classList.remove('downloading');
-        showToast('已下载：' + decodeURIComponent(fname));
+        // 添加到本地歌曲列表
+        const decodedName = decodeURIComponent(fname);
+        const nameParts = decodedName.replace('.mp3','').split(' - ');
+        const coverUrl = song.album && song.album.picUrl ? song.album.picUrl + '?param=100y100' : '';
+        const newSong = {
+          id: 'dl_' + Date.now() + '_' + Math.random().toString(36).substr(2,6),
+          name: nameParts[0] || decodedName.replace('.mp3',''),
+          artist: nameParts.slice(1).join(' - ') || artists,
+          album: song.album ? song.album.name : '',
+          duration: song.duration || 0,
+          url: 'file://' + path,
+          coverUrl: coverUrl,
+          addedAt: Date.now()
+        };
+        songs.push(newSong);
+        saveAll();
+        renderLocal();
+        showToast('已下载到本地音乐：' + newSong.name);
       };
       window.onOnlineDownloadError = function(fname, msg) {
         btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 下载';

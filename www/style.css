@@ -607,7 +607,7 @@ input {
 
 /* ========== Progress ========== */
 .progress-section {
-  padding: 20px 0 28px;
+  padding: 20px 0 40px;
   flex-shrink: 0;
 }
 
