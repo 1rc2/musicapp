@@ -11,8 +11,8 @@ android {
         applicationId = "com.musicflow.app"
         minSdk = 21
         targetSdk = 36
-        versionCode = 10300
-        versionName = "1.3.0"
+        versionCode = 10309
+        versionName = "1.3.9"
     }
 
     signingConfigs {
