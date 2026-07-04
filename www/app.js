@@ -82,6 +82,8 @@
     recentList: $('#recent-list'),
     localList: $('#local-list'),
     searchResults: $('#search-results'),
+    searchStatus: $('#search-status'),
+    searchTabs: $$('.search-tab'),
     playlistGrid: $('#playlist-grid'),
     playlistDetailList: $('#playlist-detail-list'),
     playlistDetailTitle: $('#playlist-detail-title'),
@@ -280,8 +282,11 @@
       audio.pause();
       isPlaying = false;
     } else {
-      audio.play().catch(() => {});
-      isPlaying = true;
+      audio.play().then(() => {
+        isPlaying = true;
+        updatePlayUI();
+      }).catch(() => {});
+      return;
     }
     updatePlayUI();
   }
@@ -290,7 +295,7 @@
     if (currentQueue.length === 0) return;
     if (playMode === 'single') {
       audio.currentTime = 0;
-      audio.play();
+      audio.play().catch(() => {});
       return;
     }
     if (playMode === 'shuffle') {
@@ -464,8 +469,8 @@
     div.dataset.id = song.id;
     div.dataset.context = context;
 
-    const isPlaying = currentSong && song.id === currentSong.id;
-    const coverContent = isPlaying && isPlaying ?
+    const isCurrentSong = currentSong && song.id === currentSong.id;
+    const coverContent = isCurrentSong && isPlaying ?
       '<div class="playing-indicator"><span></span><span></span><span></span></div>' :
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="10 8 16 12 10 16 10 8"/></svg>';
 
@@ -581,21 +586,166 @@
     songList.forEach(s => dom.playlistDetailList.appendChild(createSongItem(s, 'playlist:' + playlist.id)));
   }
 
+  // ==================== 搜索 ====================
+  let searchSource = 'online';
+  let searchTimer = null;
+
   function renderSearch(query) {
     dom.searchResults.innerHTML = '';
     if (!query.trim()) return;
+    if (searchSource === 'local') {
+      renderLocalSearch(query);
+    } else {
+      renderOnlineSearch(query);
+    }
+  }
+
+  function renderLocalSearch(query) {
     const q = query.toLowerCase();
     const results = songs.filter(s =>
       s.name.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q)
     );
     if (results.length === 0) {
-      dom.searchResults.innerHTML = `
-        <div class="empty-state">
-          <p>未找到匹配的歌曲</p>
-        </div>`;
+      dom.searchResults.innerHTML = '<div class="empty-state"><p>未找到匹配的本地歌曲</p></div>';
       return;
     }
     results.forEach(s => dom.searchResults.appendChild(createSongItem(s, 'search')));
+  }
+
+  async function renderOnlineSearch(query) {
+    clearTimeout(searchTimer);
+    if (!query.trim()) return;
+
+    dom.searchStatus.style.display = 'flex';
+    dom.searchResults.innerHTML = '';
+
+    try {
+      const resp = await fetch('https://music.163.com/api/search/get/web?csrf_token=&hlpretag=&hlposttag=&s=' +
+        encodeURIComponent(query) + '&type=1&offset=0&total=true&limit=30');
+
+      if (!resp.ok) throw new Error('搜索失败');
+
+      const data = await resp.json();
+      const list = data.result && data.result.songs ? data.result.songs : [];
+
+      if (list.length === 0) {
+        dom.searchResults.innerHTML = '<div class="empty-state"><p>未找到相关歌曲</p></div>';
+        return;
+      }
+
+      list.forEach(song => {
+        const artists = (song.artists || []).map(a => a.name).join(' / ');
+        const album = song.album ? song.album.name : '';
+        const duration = song.duration || 0;
+        const coverUrl = song.album && song.album.picUrl ? song.album.picUrl + '?param=100y100' : '';
+
+        const item = document.createElement('div');
+        item.className = 'song-item';
+        item.dataset.id = 'online_' + song.id;
+        item.dataset.context = 'online';
+        item.innerHTML = `
+          <div class="song-item-cover">
+            ${coverUrl ?
+              '<img src="' + coverUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" onerror="this.style.display=\'none\'">' :
+              '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="10 8 16 12 10 16 10 8"/></svg>'
+            }
+          </div>
+          <div class="song-item-info">
+            <div class="song-name">${escHtml(song.name)}</div>
+            <div class="song-meta">${escHtml(artists)}${album ? ' · ' + escHtml(album) : ''}</div>
+          </div>
+          <div class="song-item-actions">
+            <button class="btn-download-song" data-song-id="${song.id}" data-song-name="${escHtml(song.name)}" data-artist="${escHtml(artists)}" title="下载">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              下载
+            </button>
+          </div>
+        `;
+
+        // 点击播放
+        item.addEventListener('click', (e) => {
+          if (e.target.closest('.btn-download-song')) return;
+          playOnlineSong(song);
+        });
+
+        // 下载按钮
+        const dlBtn = item.querySelector('.btn-download-song');
+        dlBtn.addEventListener('click', () => {
+          downloadOnlineSong(song, dlBtn);
+        });
+
+        dom.searchResults.appendChild(item);
+      });
+    } catch (e) {
+      dom.searchResults.innerHTML = '<div class="empty-state"><p>搜索失败：' + escHtml(e.message) + '</p><p style="margin-top:8px;font-size:12px;color:var(--text-muted)">请检查网络连接</p></div>';
+    } finally {
+      dom.searchStatus.style.display = 'none';
+    }
+  }
+
+  function playOnlineSong(song) {
+    const artists = (song.artists || []).map(a => a.name).join(' / ');
+    const coverUrl = song.album && song.album.picUrl ? song.album.picUrl + '?param=400y400' : '';
+
+    const onlineSong = {
+      id: 'online_' + song.id,
+      name: song.name,
+      artist: artists,
+      album: song.album ? song.album.name : '',
+      duration: song.duration || 0,
+      url: 'https://music.163.com/song/media/outer/url?id=' + song.id + '.mp3',
+      coverUrl: coverUrl,
+      isOnline: true,
+      addedAt: Date.now()
+    };
+
+    playSong(onlineSong);
+
+    // 更新封面
+    if (coverUrl && dom.coverImgLarge) {
+      dom.coverImgLarge.src = coverUrl;
+      dom.coverImgSmall.src = song.album && song.album.picUrl ? song.album.picUrl + '?param=100y100' : '';
+    }
+  }
+
+  async function downloadOnlineSong(song, btn) {
+    btn.classList.add('downloading');
+    btn.innerHTML = '<div class="search-spinner" style="width:12px;height:12px;border-width:1.5px;"></div> 下载中';
+
+    try {
+      const url = 'https://music.163.com/song/media/outer/url?id=' + song.id + '.mp3';
+      const resp = await fetch(url);
+
+      if (!resp.ok) throw new Error('下载失败');
+
+      const blob = await resp.blob();
+      const artists = (song.artists || []).map(a => a.name).join(',');
+      const filename = song.name + ' - ' + artists + '.mp3';
+
+      // 通过 NativeBridge 保存到本地（如果有）
+      if (NativeBridge && typeof NativeBridge.saveDownloadedFile === 'function') {
+        const reader = new FileReader();
+        reader.onload = () => {
+          NativeBridge.saveDownloadedFile(filename, reader.result);
+          showToast('已下载：' + song.name);
+        };
+        reader.readAsDataURL(blob);
+      } else {
+        // Web fallback：创建下载链接
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showToast('已下载：' + song.name);
+      }
+
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已下载';
+    } catch (e) {
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 下载';
+      btn.classList.remove('downloading');
+      showToast('下载失败：' + e.message);
+    }
   }
 
   // ==================== 歌曲操作弹窗 ====================
@@ -1034,7 +1184,7 @@
       dom.btnMatchLyric.textContent = '搜索中...';
 
       try {
-        const lyrics = await fetchLyrics(currentSong.title, currentSong.artist);
+        const lyrics = await fetchLyrics(currentSong.name, currentSong.artist);
         const lycEl = dom.lyricsContent;
         const lyricSection = document.getElementById('lyrics-section');
 
@@ -1193,10 +1343,24 @@
       switchPage('search');
       setTimeout(() => dom.searchInput.focus(), 300);
     });
-    dom.searchInput.addEventListener('input', (e) => renderSearch(e.target.value));
+    dom.searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => renderSearch(e.target.value), 300);
+    });
     dom.btnSearchClear.addEventListener('click', () => {
       dom.searchInput.value = '';
       dom.searchResults.innerHTML = '';
+      dom.searchStatus.style.display = 'none';
+    });
+
+    // 搜索标签切换
+    dom.searchTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        dom.searchTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        searchSource = tab.dataset.source;
+        renderSearch(dom.searchInput.value);
+      });
     });
 
     // 清空最近播放
@@ -1276,6 +1440,7 @@
       dom.deletePlaylistMsg.textContent = '确定清除所有数据（播放记录、歌单、收藏等）？此操作不可恢复。';
       dom.btnConfirmDeletePl.textContent = '清除';
       dom.btnConfirmDeletePl.className = 'btn btn-danger';
+      const origClose = dom.modalDeletePlaylist.querySelector('.modal-close-btn');
       openModal(dom.modalDeletePlaylist);
       dom.btnConfirmDeletePl.onclick = function clearAll() {
         closeModal(dom.modalDeletePlaylist);
@@ -1301,10 +1466,6 @@
         dom.btnMode.innerHTML = modeIcons[playMode];
         saveAll();
         showToast('已清除所有数据');
-        // 恢复按钮状态
-        dom.btnConfirmDeletePl.textContent = '删除';
-        dom.btnConfirmDeletePl.className = 'btn btn-danger';
-        dom.btnConfirmDeletePl.onclick = null;
       };
     });
 

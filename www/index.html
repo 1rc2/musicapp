@@ -104,8 +104,16 @@
     <section class="page" id="page-search">
       <div class="search-bar">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="search-input" placeholder="搜索本地音乐...">
+        <input type="text" id="search-input" placeholder="搜索歌曲名、歌手...">
         <button class="text-btn" id="btn-search-clear">清除</button>
+      </div>
+      <div class="search-tabs">
+        <button class="search-tab active" data-source="online">在线搜索</button>
+        <button class="search-tab" data-source="local">本地音乐</button>
+      </div>
+      <div class="search-status" id="search-status" style="display:none;">
+        <div class="search-spinner"></div>
+        <span>搜索中...</span>
       </div>
       <div class="song-list" id="search-results"></div>
     </section>
