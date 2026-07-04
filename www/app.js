@@ -157,6 +157,11 @@
     btnFallbackClose: $('#btn-fallback-close'),
     btnCheckUpdate: $('#btn-check-update'),
     settingAbout: $('#setting-about'),
+    settingCoverAnim: $('#setting-cover-anim'),
+    toggleCoverAnim: $('#toggle-cover-anim'),
+    coverAnimDesc: $('#cover-anim-desc'),
+    coverImgSmall: $('#cover-img-small'),
+    coverImgLarge: $('#cover-img-large'),
     settingUpdateServer: $('#setting-update-server'),
     updateDesc: $('#update-desc'),
     updateServerDesc: $('#update-server-desc'),
@@ -395,6 +400,13 @@
       }
     }
     _lastPlayingEl = newPlayingEl;
+  }
+
+  // 更新封面显示（动/静态）
+  function updateCoverDisplay() {
+    const animated = Storage.get('coverAnim', '1') === '1';
+    dom.coverImgSmall.src = animated ? 'default_cover.gif' : 'default_cover_small_static.png';
+    dom.coverImgLarge.src = animated ? 'default_cover.gif' : 'default_cover_static.png';
   }
 
   function updateProgress() {
@@ -1295,9 +1307,9 @@
     });
 
     // ==================== 远程更新 ====================
-    // 版本号由 Java 端注入（__APP_VERSION__ / __APP_VERSION_CODE__），不再硬编码
-    const APP_VERSION = window.__APP_VERSION__ || 'dev';
-    const APP_VERSION_CODE = window.__APP_VERSION_CODE__ || 0;
+    // 版本号由 Java Bridge 实时提供，不再硬编码
+    const APP_VERSION = (NativeBridge && NativeBridge.getAppVersion()) || 'dev';
+    const APP_VERSION_CODE = (NativeBridge && NativeBridge.getAppVersionCode()) || 0;
     let updateServer = Storage.get('updateServer', 'github');
     let updateInfo = null;
 
@@ -1335,6 +1347,14 @@
       openModal(dom.modalAbout);
     });
     dom.btnCloseAbout.addEventListener('click', () => closeModal(dom.modalAbout));
+
+    // 封面动画开关
+    dom.toggleCoverAnim.addEventListener('change', () => {
+      const enabled = dom.toggleCoverAnim.checked;
+      Storage.set('coverAnim', enabled ? '1' : '0');
+      dom.coverAnimDesc.textContent = enabled ? '已开启' : '已关闭';
+      updateCoverDisplay();
+    });
 
     // 检查更新
     dom.btnCheckUpdate.addEventListener('click', () => {
@@ -1541,6 +1561,12 @@
     // 版本号显示
     dom.updateVersionDisplay.textContent = APP_VERSION;
     dom.versionDesc.textContent = 'MusicFlow v' + APP_VERSION;
+
+    // 封面动画设置
+    const coverAnim = Storage.get('coverAnim', '1') === '1';
+    dom.toggleCoverAnim.checked = coverAnim;
+    dom.coverAnimDesc.textContent = coverAnim ? '已开启' : '已关闭';
+    updateCoverDisplay();
 
     // 恢复上次播放状态
     const lastSongId = Storage.get('lastSong');

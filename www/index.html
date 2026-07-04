@@ -206,6 +206,22 @@
           </div>
         </div>
         <div class="settings-group">
+          <div class="settings-group-title">封面</div>
+          <div class="settings-item" id="setting-cover-anim">
+            <div class="settings-item-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+            </div>
+            <div class="settings-item-text">
+              <span class="settings-item-label">动态封面</span>
+              <span class="settings-item-desc" id="cover-anim-desc">已开启</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-cover-anim" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-group">
           <div class="settings-group-title">关于</div>
           <div class="settings-item" id="setting-about">
             <div class="settings-item-icon">
@@ -262,7 +278,7 @@
   <div class="player-bar" id="player-bar">
     <div class="player-song-info" id="player-song-info">
       <div class="player-cover" id="player-cover">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg>
+        <img id="cover-img-small" class="cover-img-small" src="default_cover_small_static.png" alt="cover">
       </div>
       <div class="player-text">
         <span class="player-title" id="player-title">未播放</span>
@@ -299,7 +315,7 @@
 
     <div class="expanded-cover" id="expanded-cover">
       <div class="cover-art" id="cover-art">
-        <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.5" opacity="0.2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+        <img id="cover-img-large" class="cover-img-large" src="default_cover_static.png" alt="cover">
       </div>
     </div>
 

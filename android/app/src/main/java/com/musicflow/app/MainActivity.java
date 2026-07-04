@@ -81,15 +81,7 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new MusicBridge(), "NativeBridge");
         webView.setWebChromeClient(new WebChromeClient());
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                // 注入当前版本号，JS 不再硬编码
-                view.evaluateJavascript(
-                    "window.__APP_VERSION__='" + getCurrentVersionName() + "';" +
-                    "window.__APP_VERSION_CODE__=" + getCurrentVersionCode() + ";", null);
-            }
-        });
+        webView.setWebViewClient(new WebViewClient());
 
         requestPermissions();
         webView.loadUrl("file:///android_asset/public/index.html");
@@ -465,6 +457,16 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void startRemoteDownload(String downloadUrl) {
             new Thread(() -> downloadApkFromUrl(downloadUrl)).start();
+        }
+
+        @JavascriptInterface
+        public String getAppVersion() {
+            return getCurrentVersionName();
+        }
+
+        @JavascriptInterface
+        public int getAppVersionCode() {
+            return getCurrentVersionCode();
         }
 
         @JavascriptInterface
