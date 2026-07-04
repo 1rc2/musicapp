@@ -1,0 +1,6 @@
+#!/bin/sh
+# Gradle wrapper script
+export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-11-openjdk-amd64}
+APP_HOME=$(cd "$(dirname "$0")" && pwd)
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+exec $JAVA_HOME/bin/java -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
