@@ -338,15 +338,20 @@ class MainActivity : ComponentActivity() {
         fun searchOnline(query: String) {
             Thread {
                 try {
-                    val url = URL("https://music.163.com/api/search/pc?type=1&s=${java.net.URLEncoder.encode(query, "UTF-8")}&limit=30")
-                    val conn = url.openConnection() as HttpURLConnection
-                    conn.connectTimeout = 8000
-                    conn.readTimeout = 8000
-                    conn.setRequestProperty("Referer", "https://music.163.com")
-                    conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                    val body = conn.inputStream.bufferedReader().readText()
-                    runOnUiThread {
-                        callJs("if(window.onOnlineSearchResult)onOnlineSearchResult(${JSONObject.quote(body)})")
+                    val client = okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+                    val req = okhttp3.Request.Builder()
+                        .url("https://music.163.com/api/search/pc?type=1&s=${java.net.URLEncoder.encode(query, "UTF-8")}&limit=30")
+                        .header("Referer", "https://music.163.com")
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
+                        .build()
+                    client.newCall(req).execute().use { resp ->
+                        val body = resp.body?.string() ?: ""
+                        runOnUiThread {
+                            callJs("if(window.onOnlineSearchResult)onOnlineSearchResult(${JSONObject.quote(body)})")
+                        }
                     }
                 } catch (e: Exception) {
                     runOnUiThread {
@@ -367,101 +372,104 @@ class MainActivity : ComponentActivity() {
                     if (!musicDir.exists()) musicDir.mkdirs()
                     val file = File(musicDir, decodedName)
 
-                    // 手动跟随重定向（网易云音乐返回 302，且可能跨 HTTPS→HTTP）
-                    var currentUrl = url
-                    var redirectCount = 0
-                    var conn: HttpURLConnection
-                    var finalConn: HttpURLConnection? = null
+                    // 使用 OkHttp 自动跟随重定向（支持 HTTPS→HTTP 跨协议）
+                    val client = okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                        .followRedirects(true)
+                        .followSslRedirects(true)
+                        .build()
 
-                    while (redirectCount < 5) {
-                        conn = URL(currentUrl).openConnection() as HttpURLConnection
-                        conn.instanceFollowRedirects = false
-                        conn.connectTimeout = 15000
-                        conn.readTimeout = 30000
-                        conn.setRequestProperty("Referer", "https://music.163.com")
-                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
+                    val request = okhttp3.Request.Builder()
+                        .url(url)
+                        .header("Referer", "https://music.163.com")
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                        .header("Accept", "*/*")
+                        .header("Range", "bytes=0-")
+                        .build()
 
-                        val code = conn.responseCode
-                        if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
-                            val location = conn.getHeaderField("Location")
-                            conn.disconnect()
-                            if (location.isNullOrEmpty()) {
-                                runOnUiThread {
-                                    callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','重定向地址为空')")
-                                }
-                                return@Thread
-                            }
-                            currentUrl = if (location.startsWith("http")) {
-                                location
-                            } else {
-                                val base = URL(currentUrl)
-                                URL(base, location).toString()
-                            }
-                            redirectCount++
-                            continue
-                        }
-
-                        if (code != 200) {
-                            conn.disconnect()
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
                             runOnUiThread {
-                                callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','服务器返回 $code')")
+                                callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','服务器返回 ${response.code}')")
                             }
                             return@Thread
                         }
 
-                        finalConn = conn
-                        break
-                    }
-
-                    if (finalConn == null) {
-                        runOnUiThread {
-                            callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','重定向次数过多')")
-                        }
-                        return@Thread
-                    }
-
-                    val totalSize = finalConn.contentLengthLong
-                    finalConn.inputStream.use { input ->
-                        FileOutputStream(file).use { output ->
-                            val buffer = ByteArray(8192)
-                            var downloaded = 0L
-                            var bytesRead: Int
-                            var lastPct = -1
-                            while (input.read(buffer).also { bytesRead = it } != -1) {
-                                output.write(buffer, 0, bytesRead)
-                                downloaded += bytesRead
-                                if (totalSize > 0) {
-                                    val pct = (downloaded * 100 / totalSize).toInt()
-                                    if (pct != lastPct && pct % 5 == 0) {
-                                        lastPct = pct
-                                        runOnUiThread {
-                                            callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('$filename',$pct,$totalSize)")
+                        val totalSize = response.body?.contentLength() ?: -1L
+                        response.body?.byteStream().use { input ->
+                            FileOutputStream(file).use { output ->
+                                val buffer = ByteArray(8192)
+                                var downloaded = 0L
+                                var bytesRead: Int
+                                var lastPct = -1
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    output.write(buffer, 0, bytesRead)
+                                    downloaded += bytesRead
+                                    if (totalSize > 0) {
+                                        val pct = (downloaded * 100 / totalSize).toInt()
+                                        if (pct != lastPct && pct % 5 == 0) {
+                                            lastPct = pct
+                                            runOnUiThread {
+                                                callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('$filename',$pct,$totalSize)")
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    finalConn.disconnect()
 
-                    // 校验下载文件大小（小于 1KB 说明可能是错误页面）
-                    if (file.length() < 1024) {
-                        file.delete()
-                        runOnUiThread {
-                            callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','下载文件过小，可能源不可用')")
+                        // 校验下载文件：小于 1KB 或不是音频格式
+                        if (file.length() < 1024) {
+                            file.delete()
+                            runOnUiThread {
+                                callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','下载文件过小，可能源不可用')")
+                            }
+                            return@Thread
                         }
-                        return@Thread
-                    }
 
-                    // 获取 contentUri 供前端播放
-                    val contentUri = FileProvider.getUriForFile(
-                        this@MainActivity,
-                        "$packageName.fileprovider",
-                        file
-                    )
+                        // 检查文件头是否为音频（防止下载了 HTML 错误页）
+                        val headerBytes = ByteArray(4)
+                        FileInputStream(file).use { fis ->
+                            fis.read(headerBytes)
+                        }
+                        val isAudio = when {
+                            // MP3: ID3 或 FF FB
+                            headerBytes[0] == 0x49.toByte() && headerBytes[1] == 0x44.toByte() &&
+                                headerBytes[2] == 0x33.toByte() -> true
+                            (headerBytes[0] == 0xFF.toByte() && (headerBytes[1] == 0xFB.toByte() ||
+                                headerBytes[1] == 0xF3.toByte() || headerBytes[1] == 0xF2.toByte())) -> true
+                            // FLAC: fLaC
+                            headerBytes[0] == 0x66.toByte() && headerBytes[1] == 0x4C.toByte() &&
+                                headerBytes[2] == 0x61.toByte() && headerBytes[3] == 0x43.toByte() -> true
+                            // RIFF (WAV)
+                            headerBytes[0] == 0x52.toByte() && headerBytes[1] == 0x49.toByte() &&
+                                headerBytes[2] == 0x46.toByte() && headerBytes[3] == 0x46.toByte() -> true
+                            // OGG: OggS
+                            headerBytes[0] == 0x4F.toByte() && headerBytes[1] == 0x67.toByte() &&
+                                headerBytes[2] == 0x67.toByte() && headerBytes[3] == 0x53.toByte() -> true
+                            // M4A: ftyp 在第 4-7 字节
+                            headerBytes[3] == 0x66.toByte() -> true
+                            else -> false
+                        }
+                        if (!isAudio) {
+                            file.delete()
+                            runOnUiThread {
+                                callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','下载内容不是音频文件，可能歌曲不可用或需要 VIP')")
+                            }
+                            return@Thread
+                        }
 
-                    runOnUiThread {
-                        callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete('$filename','${file.absolutePath}',${file.length()},'$contentUri')")
+                        // 获取 contentUri 供前端播放
+                        val contentUri = FileProvider.getUriForFile(
+                            this@MainActivity,
+                            "$packageName.fileprovider",
+                            file
+                        )
+
+                        runOnUiThread {
+                            callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete('$filename','${file.absolutePath}',${file.length()},'$contentUri')")
+                        }
                     }
                 } catch (e: Exception) {
                     runOnUiThread {

@@ -63,6 +63,9 @@ dependencies {
     // WebView
     implementation("androidx.webkit:webkit:1.11.0")
 
+    // OkHttp — 处理重定向/CDN 下载
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 }
