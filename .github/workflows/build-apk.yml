@@ -18,7 +18,10 @@ jobs:
           distribution: 'temurin'
           
       - name: Build APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleRelease
+        run: cd android && chmod +x gradlew && ./gradlew assembleRelease --info 2>&1 | tail -100
+        
+      - name: List build output
+        run: ls -la android/app/build/outputs/apk/release/
         
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
