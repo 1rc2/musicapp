@@ -1307,9 +1307,25 @@
     });
 
     // ==================== 远程更新 ====================
-    // 版本号由 Java Bridge 实时提供，不再硬编码
-    const APP_VERSION = (NativeBridge && NativeBridge.getAppVersion()) || 'dev';
-    const APP_VERSION_CODE = (NativeBridge && NativeBridge.getAppVersionCode()) || 0;
+    // 版本号从 Java 读取（兼容新旧两套方式）
+    function getAppVersion() {
+      // 新方式：NativeBridge 实时读取
+      if (NativeBridge && typeof NativeBridge.getAppVersion === 'function') {
+        try { var v = NativeBridge.getAppVersion(); if (v && v !== '0.0.0') return v; } catch(e) {}
+      }
+      // 旧方式：onPageFinished 注入的 window 变量
+      if (window.__APP_VERSION__) return window.__APP_VERSION__;
+      return 'dev';
+    }
+    function getAppVersionCode() {
+      if (NativeBridge && typeof NativeBridge.getAppVersionCode === 'function') {
+        try { var c = NativeBridge.getAppVersionCode(); if (c && c > 0) return c; } catch(e) {}
+      }
+      if (window.__APP_VERSION_CODE__) return window.__APP_VERSION_CODE__;
+      return 0;
+    }
+    const APP_VERSION = getAppVersion();
+    const APP_VERSION_CODE = getAppVersionCode();
     let updateServer = Storage.get('updateServer', 'github');
     let updateInfo = null;
 

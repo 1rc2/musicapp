@@ -81,7 +81,15 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new MusicBridge(), "NativeBridge");
         webView.setWebChromeClient(new WebChromeClient());
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // 兼容旧方式注入版本号，新 JS 优先用 NativeBridge
+                view.evaluateJavascript(
+                    "window.__APP_VERSION__='" + getCurrentVersionName() + "';" +
+                    "window.__APP_VERSION_CODE__=" + getCurrentVersionCode() + ";", null);
+            }
+        });
 
         requestPermissions();
         webView.loadUrl("file:///android_asset/public/index.html");
