@@ -12,9 +12,6 @@ gen/
 *.idsig
 *.apk.idsig
 
-# Capacitor
-android/app/src/main/assets/
-
 # IDE
 .idea/
 *.iml
