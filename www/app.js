@@ -647,6 +647,8 @@
       songList = songs.slice();
     } else if (context === 'recent') {
       songList = recentPlayed.map(id => songs.find(s => s.id === id)).filter(Boolean);
+    } else if (context === 'online') {
+      songList = onlineSearchResults.slice();
     } else if (context === 'search') {
       // 从搜索结果列表构建
       const items = dom.searchResults.querySelectorAll('.song-item');
@@ -966,63 +968,21 @@
       }
 
       dom.searchResults.innerHTML = '';
-      list.forEach(song => {
-        const artists = (song.artists || []).map(a => a.name).join(' / ');
-        const album = song.album ? song.album.name : '';
-        const coverUrl = song.album && song.album.picUrl ? song.album.picUrl + '?param=100y100' : '';
-
-        const item = document.createElement('div');
-        item.className = 'song-item';
-        item.dataset.id = 'online_' + song.id;
-        item.dataset.context = 'online';
-        item.innerHTML = `
-          <div class="song-item-cover">
-            ${coverUrl ?
-              '<img src="' + coverUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" onerror="this.style.display=\'none\'">' :
-              '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="10 8 16 12 10 16 10 8"/></svg>'
-            }
-          </div>
-          <div class="song-item-info">
-            <div class="song-name">${escHtml(song.name)}</div>
-            <div class="song-meta">${escHtml(artists)}${album ? ' · ' + escHtml(album) : ''}</div>
-          </div>
-          <div class="song-item-actions">
-            <button class="btn-download-song" data-song-id="${song.id}" data-song-name="${escHtml(song.name)}" data-artist="${escHtml(artists)}" title="下载">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              下载
-            </button>
-          </div>
-        `;
-
-        // 点击播放
-        item.addEventListener('click', (e) => {
-          if (e.target.closest('.btn-download-song')) return;
-          const onlineSong = playOnlineSong(song, true);
-          // 从在线搜索结果构建队列
-          const queue = onlineSearchResults.map(s => {
-            const a = (s.artists || []).map(x => x.name).join(' / ');
-            const cu = s.album && s.album.picUrl ? s.album.picUrl + '?param=400y400' : '';
-            return {
-              id: 'online_' + s.id,
-              name: s.name,
-              artist: a,
-              album: s.album ? s.album.name : '',
-              duration: Math.floor((s.duration || 0) / 1000),
-              url: 'https://music.163.com/song/media/outer/url?id=' + s.id + '.mp3',
-              coverUrl: cu,
-              isOnline: true,
-              addedAt: Date.now()
-            };
-          });
-          playSong(onlineSong, queue);
-        });
-
-        // 下载按钮
-        const dlBtn = item.querySelector('.btn-download-song');
+      onlineSearchResults = list.map(song => playOnlineSong(song, true));
+      onlineSearchResults.forEach(song => {
+        const item = createSongItem(song, 'online');
+        const actions = item.querySelector('.song-item-actions');
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'btn-download-song';
+        dlBtn.dataset.songId = song.id.replace('online_', '');
+        dlBtn.dataset.songName = song.name;
+        dlBtn.dataset.artist = song.artist;
+        dlBtn.title = '下载';
+        dlBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>下载';
         dlBtn.addEventListener('click', () => {
-          downloadOnlineSong(song, dlBtn);
+          downloadOnlineSong({ id: dlBtn.dataset.songId, name: dlBtn.dataset.songName, artists: dlBtn.dataset.artist.split(' / ').map(n => ({ name: n })) }, dlBtn);
         });
-
+        actions.insertBefore(dlBtn, actions.firstChild);
         dom.searchResults.appendChild(item);
       });
     } catch (e) {
@@ -1169,6 +1129,9 @@
           showToast('已取消喜欢');
         } else {
           favorites.push(actionSong.id);
+          if (!songs.find(s => s.id === actionSong.id)) {
+            songs.push(actionSong);
+          }
           showToast('已添加到喜欢');
         }
         saveAll();
@@ -1238,6 +1201,9 @@
       item.addEventListener('click', () => {
         if (!pl.songIds.includes(actionSong.id)) {
           pl.songIds.push(actionSong.id);
+          if (!songs.find(s => s.id === actionSong.id)) {
+            songs.push(actionSong);
+          }
           saveAll();
           showToast('已添加到「' + pl.name + '」');
           renderPlaylists();
