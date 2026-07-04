@@ -198,7 +198,7 @@
   // 全局分发器根据 filename 查找到对应的按钮和歌曲信息
   window._dlCallbacks = {};
 
-  window.onOnlineDownloadComplete = function(fname, path, size) {
+  window.onOnlineDownloadComplete = function(fname, path, size, contentUri) {
     try {
       const key = 'dl_' + fname;
       const ctx = window._dlCallbacks[key];
@@ -215,7 +215,7 @@
         artist: nameParts.slice(1).join(' - ') || artists,
         album: song.album ? song.album.name : '',
         duration: song.duration || 0,
-        url: 'file://' + path,
+        url: contentUri || ('file://' + path),
         coverUrl: coverUrl,
         addedAt: Date.now()
       };

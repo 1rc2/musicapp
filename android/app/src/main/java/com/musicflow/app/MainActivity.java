@@ -601,7 +601,17 @@ public class MainActivity extends Activity {
 
                     final String path = outFile.getAbsolutePath();
                     final long size = outFile.length();
-                    callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete(" + jsString(filename) + "," + jsString(path) + "," + size + ")");
+                    // 生成 content:// URI 可播放链接
+                    String contentUri = "";
+                    try {
+                        contentUri = GenericFileProvider.getUriForFile(
+                            MainActivity.this,
+                            "com.musicflow.app.fileprovider",
+                            outFile).toString();
+                    } catch (Exception ignored) {}
+                    callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete(" +
+                        jsString(filename) + "," + jsString(path) + "," + size + "," +
+                        jsString(contentUri) + ")");
                 } catch (Exception e) {
                     callJs("if(window.onOnlineDownloadError)onOnlineDownloadError(" + jsString(filename) + "," + jsString(e.getMessage()) + ")");
                 } finally {

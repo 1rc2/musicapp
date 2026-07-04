@@ -387,10 +387,10 @@ input {
   transform: translateY(100%);
 }
 
-/* Mini player 顶部进度条 */
+/* Mini player 底部进度条 */
 .player-bar-progress {
   position: absolute;
-  top: -1px;
+  bottom: 0;
   left: 0;
   height: 2px;
   background: var(--accent);
