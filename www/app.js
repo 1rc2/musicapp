@@ -752,10 +752,58 @@
   let searchSource = 'online';
   let searchTimer = null;
   let onlineSearchResults = []; // 存储在线搜索结果用于构建队列
+  let searchHistory = Storage.get('searchHistory', []); // 搜索历史
+
+  function saveSearchHistory(query) {
+    if (!query.trim()) return;
+    searchHistory = searchHistory.filter(q => q !== query.trim());
+    searchHistory.unshift(query.trim());
+    if (searchHistory.length > 20) searchHistory = searchHistory.slice(0, 20);
+    Storage.set('searchHistory', searchHistory);
+  }
+
+  function renderSearchHistory() {
+    const container = dom.searchResults;
+    if (!container || dom.searchInput.value.trim()) return;
+    if (searchHistory.length === 0) return;
+    let html = '<div class="search-history-header"><span>搜索历史</span><button class="text-btn" id="btn-clear-search-history">清空</button></div>';
+    html += '<div class="search-history-list">';
+    searchHistory.forEach(q => {
+      html += `<button class="search-history-item" data-query="${escHtml(q)}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span>${escHtml(q)}</span>
+      </button>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+
+    // 点击历史项搜索
+    container.querySelectorAll('.search-history-item').forEach(item => {
+      item.addEventListener('click', () => {
+        dom.searchInput.value = item.dataset.query;
+        renderSearch(item.dataset.query);
+      });
+    });
+
+    // 清空历史
+    const clearBtn = container.querySelector('#btn-clear-search-history');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        searchHistory = [];
+        Storage.set('searchHistory', searchHistory);
+        renderSearchHistory();
+        showToast('已清空搜索历史');
+      });
+    }
+  }
 
   function renderSearch(query) {
     dom.searchResults.innerHTML = '';
-    if (!query.trim()) return;
+    if (!query.trim()) {
+      renderSearchHistory();
+      return;
+    }
+    saveSearchHistory(query);
     if (searchSource === 'local') {
       renderLocalSearch(query);
     } else {
@@ -1570,7 +1618,13 @@
     // 搜索
     dom.btnSearch.addEventListener('click', () => {
       switchPage('search');
-      setTimeout(() => dom.searchInput.focus(), 300);
+      setTimeout(() => {
+        dom.searchInput.focus();
+        // 切换到搜索页时显示搜索历史
+        if (!dom.searchInput.value.trim()) {
+          renderSearchHistory();
+        }
+      }, 300);
     });
     dom.searchInput.addEventListener('input', (e) => {
       clearTimeout(searchTimer);
@@ -1578,8 +1632,8 @@
     });
     dom.btnSearchClear.addEventListener('click', () => {
       dom.searchInput.value = '';
-      dom.searchResults.innerHTML = '';
       dom.searchStatus.style.display = 'none';
+      renderSearchHistory();
     });
 
     // 搜索标签切换
@@ -2188,9 +2242,12 @@
         dom.expandedArtist.textContent = song.artist;
         audio.src = song.url;
         if (lastTime) audio.currentTime = lastTime;
-        // 不自动播放，等待用户交互
+        loadCoverForSong(song);
       }
     }
+
+    // 加载搜索历史
+    renderSearchHistory();
   }
 
   // 保存播放进度

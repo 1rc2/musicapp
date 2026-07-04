@@ -18,9 +18,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("debug.keystore")
-            storePassword = "musicflow123"
+            storePassword = System.getenv("STORE_PASSWORD") ?: "musicflow123"
             keyAlias = "musicflow"
-            keyPassword = "musicflow123"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "musicflow123"
         }
     }
 

@@ -20,6 +20,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceResponse
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,6 +34,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLDecoder
 import java.security.MessageDigest
 
 class MainActivity : ComponentActivity() {
@@ -88,9 +90,25 @@ class MainActivity : ComponentActivity() {
             }
             addJavascriptInterface(MusicBridge(), "NativeBridge")
             webChromeClient = WebChromeClient()
-            webViewClient = WebViewClient()
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: android.webkit.WebResourceRequest?
+                ): android.webkit.WebResourceResponse? {
+                    request?.url?.toString()?.let { url ->
+                        interceptLocalRequest(url)?.let { return it }
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+            }
         }
         setContentView(webView)
+
+        // 注入状态栏高度到 CSS 变量（Android WebView 不支持 env(safe-area-inset-top)）
+        val statusBarHeight = getStatusBarHeight()
+        webView.evaluateJavascript(
+            "document.documentElement.style.setProperty('--safe-top', '${statusBarHeight}px')", null
+        )
 
         // 连接播放服务
         PlaybackService.instance?.onPlaybackEvent = { event, data ->
@@ -313,6 +331,183 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        // ==================== 在线搜索（Java 端请求绕过 CORS） ====================
+
+        @JavascriptInterface
+        fun searchOnline(query: String) {
+            Thread {
+                try {
+                    val url = URL("https://music.163.com/api/search/pc?type=1&s=${java.net.URLEncoder.encode(query, "UTF-8")}&limit=30")
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 8000
+                    conn.setRequestProperty("Referer", "https://music.163.com")
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                    val body = conn.inputStream.bufferedReader().readText()
+                    runOnUiThread {
+                        callJs("if(window.onOnlineSearchResult)onOnlineSearchResult(${JSONObject.quote(body)})")
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        callJs("if(window.onOnlineSearchError)onOnlineSearchError('${e.message?.replace("'", "\\'") ?: "搜索失败"}')")
+                    }
+                }
+            }.start()
+        }
+
+        // ==================== 在线歌曲下载 ====================
+
+        @JavascriptInterface
+        fun downloadOnlineSong(url: String, filename: String) {
+            Thread {
+                try {
+                    val decodedName = java.net.URLDecoder.decode(filename, "UTF-8")
+                    val musicDir = File(filesDir, "music")
+                    if (!musicDir.exists()) musicDir.mkdirs()
+                    val file = File(musicDir, decodedName)
+
+                    val conn = URL(url).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 15000
+                    conn.readTimeout = 30000
+                    conn.setRequestProperty("Referer", "https://music.163.com")
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                    val totalSize = conn.contentLengthLong
+
+                    conn.inputStream.use { input ->
+                        FileOutputStream(file).use { output ->
+                            val buffer = ByteArray(8192)
+                            var downloaded = 0L
+                            var bytesRead: Int
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                downloaded += bytesRead
+                                if (totalSize > 0) {
+                                    val pct = (downloaded * 100 / totalSize).toInt()
+                                    runOnUiThread {
+                                        callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('$filename',$pct,$totalSize)")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 获取 contentUri 供前端播放
+                    val contentUri = FileProvider.getUriForFile(
+                        this@MainActivity,
+                        "$packageName.fileprovider",
+                        file
+                    )
+
+                    runOnUiThread {
+                        callJs("if(window.onOnlineDownloadComplete)onOnlineDownloadComplete('$filename','${file.absolutePath}',${file.length()},'$contentUri')")
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','${e.message?.replace("'", "\\'") ?: "下载失败"}')")
+                    }
+                }
+            }.start()
+        }
+
+        // ==================== 自定义图标 ====================
+
+        @JavascriptInterface
+        fun saveCoverImage(dataUrl: String) {
+            Thread {
+                try {
+                    val coverDir = File(filesDir, "covers")
+                    if (!coverDir.exists()) coverDir.mkdirs()
+
+                    // 解析 data URL
+                    val base64Data = dataUrl.substringAfter("base64,")
+                    val imageBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+                    val file = File(coverDir, "custom_icon.png")
+                    FileOutputStream(file).write(imageBytes)
+
+                    runOnUiThread {
+                        callJs("if(window.onCoverImageSaved)onCoverImageSaved('${file.absolutePath}')")
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        callJs("if(window.onCoverImageError)onCoverImageError('${e.message?.replace("'", "\\'") ?: "保存失败"}')")
+                    }
+                }
+            }.start()
+        }
+
+        @JavascriptInterface
+        fun resetCover() {
+            Thread {
+                try {
+                    val file = File(File(filesDir, "covers"), "custom_icon.png")
+                    if (file.exists()) file.delete()
+                    runOnUiThread {
+                        callJs("if(window.onCoverImageReset)onCoverImageReset()")
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        callJs("if(window.onCoverImageError)onCoverImageError('${e.message?.replace("'", "\\'") ?: "重置失败"}')")
+                    }
+                }
+            }.start()
+        }
+
+        // ==================== 远程更新检查 ====================
+
+        @JavascriptInterface
+        fun checkRemoteUpdate(serverUrl: String) {
+            Thread {
+                try {
+                    val url = URL(serverUrl.ifEmpty { "https://api.github.com/repos/1rc2/musicapp/releases/latest" })
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 8000
+                    conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                    val body = conn.inputStream.bufferedReader().readText()
+                    val release = JSONObject(body)
+
+                    val tagName = release.optString("tag_name", "").replace("v", "").trim()
+                    val changelog = release.optString("body", "")
+                    val parts = tagName.split(".")
+                    val remoteCode = if (parts.size >= 3) {
+                        parts[0].toInt() * 10000 + parts[1].toInt() * 100 + parts[2].toInt()
+                    } else 0
+                    val hasUpdate = remoteCode > 0 && remoteCode > getCurrentVersionCode()
+
+                    var downloadUrl = ""
+                    var fileSize = 0L
+                    val assets = release.optJSONArray("assets")
+                    if (assets != null) {
+                        for (i in 0 until assets.length()) {
+                            val asset = assets.getJSONObject(i)
+                            if (asset.optString("name", "").endsWith(".apk")) {
+                                downloadUrl = asset.optString("browser_download_url", "")
+                                fileSize = asset.optLong("size", 0)
+                                break
+                            }
+                        }
+                    }
+
+                    val result = JSONObject().apply {
+                        put("hasUpdate", hasUpdate)
+                        put("remoteVersion", tagName)
+                        put("remoteCode", remoteCode)
+                        put("downloadUrl", downloadUrl)
+                        put("fileSize", fileSize)
+                        put("changelog", changelog)
+                    }
+
+                    runOnUiThread {
+                        callJs("if(window.onRemoteUpdateCheckResult)onRemoteUpdateCheckResult($result)")
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        callJs("if(window.onRemoteUpdateCheckError)onRemoteUpdateCheckError('${e.message?.replace("'", "\\'") ?: "检查失败"}')")
+                    }
+                }
+            }.start()
+        }
     }
 
     // ==================== 播放服务 ====================
@@ -388,6 +583,18 @@ class MainActivity : ComponentActivity() {
             // fallback
         }
         return null
+    }
+
+    // ==================== 状态栏 ====================
+
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) {
+            resources.getDimensionPixelSize(resourceId)
+        } else {
+            // 默认 24dp（约等于大多数设备的状态栏高度）
+            (24 * resources.displayMetrics.density).toInt()
+        }
     }
 
     // ==================== 更新下载 ====================
@@ -549,6 +756,72 @@ class MainActivity : ComponentActivity() {
         webView.post {
             webView.evaluateJavascript(js, null)
         }
+    }
+
+    // ==================== 本地资源拦截 ====================
+
+    /**
+     * 拦截 WebView 对本地音乐/封面的 HTTP 请求，返回本地文件内容
+     */
+    private fun interceptLocalRequest(url: String): WebResourceResponse? {
+        try {
+            // 拦截本地音乐文件
+            if (url.startsWith("https://musicflow.local/music/")) {
+                val fname = URLDecoder.decode(
+                    url.substring("https://musicflow.local/music/".length()), "UTF-8"
+                )
+                val file = File(File(filesDir, "music"), fname)
+                if (file.exists() && file.canRead()) {
+                    val contentType = when {
+                        fname.endsWith(".mp3") -> "audio/mpeg"
+                        fname.endsWith(".flac") -> "audio/flac"
+                        fname.endsWith(".wav") -> "audio/wav"
+                        fname.endsWith(".ogg") -> "audio/ogg"
+                        fname.endsWith(".aac") -> "audio/aac"
+                        fname.endsWith(".m4a") -> "audio/mp4"
+                        else -> "audio/mpeg"
+                    }
+                    val headers = mapOf(
+                        "Access-Control-Allow-Origin" to "*",
+                        "Content-Type" to contentType,
+                        "Content-Length" to file.length().toString(),
+                        "Accept-Ranges" to "bytes"
+                    )
+                    return WebResourceResponse(
+                        contentType, "UTF-8", 200, "OK",
+                        headers, FileInputStream(file)
+                    )
+                }
+            }
+
+            // 拦截本地封面图片
+            if (url.startsWith("https://musicflow.local/cover/")) {
+                val fname = URLDecoder.decode(
+                    url.substring("https://musicflow.local/cover/".length()), "UTF-8"
+                )
+                val file = File(File(filesDir, "covers"), fname)
+                if (file.exists() && file.canRead()) {
+                    val contentType = when {
+                        fname.endsWith(".png") -> "image/png"
+                        fname.endsWith(".jpg") || fname.endsWith(".jpeg") -> "image/jpeg"
+                        fname.endsWith(".webp") -> "image/webp"
+                        else -> "image/jpeg"
+                    }
+                    val headers = mapOf(
+                        "Access-Control-Allow-Origin" to "*",
+                        "Content-Type" to contentType,
+                        "Content-Length" to file.length().toString()
+                    )
+                    return WebResourceResponse(
+                        contentType, "UTF-8", 200, "OK",
+                        headers, FileInputStream(file)
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            // ignore
+        }
+        return null
     }
 
     override fun onDestroy() {
