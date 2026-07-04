@@ -367,29 +367,90 @@ class MainActivity : ComponentActivity() {
                     if (!musicDir.exists()) musicDir.mkdirs()
                     val file = File(musicDir, decodedName)
 
-                    val conn = URL(url).openConnection() as HttpURLConnection
-                    conn.connectTimeout = 15000
-                    conn.readTimeout = 30000
-                    conn.setRequestProperty("Referer", "https://music.163.com")
-                    conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                    val totalSize = conn.contentLengthLong
+                    // 手动跟随重定向（网易云音乐返回 302，且可能跨 HTTPS→HTTP）
+                    var currentUrl = url
+                    var redirectCount = 0
+                    var conn: HttpURLConnection
+                    var finalConn: HttpURLConnection? = null
 
-                    conn.inputStream.use { input ->
+                    while (redirectCount < 5) {
+                        conn = URL(currentUrl).openConnection() as HttpURLConnection
+                        conn.instanceFollowRedirects = false
+                        conn.connectTimeout = 15000
+                        conn.readTimeout = 30000
+                        conn.setRequestProperty("Referer", "https://music.163.com")
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
+
+                        val code = conn.responseCode
+                        if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                            val location = conn.getHeaderField("Location")
+                            conn.disconnect()
+                            if (location.isNullOrEmpty()) {
+                                runOnUiThread {
+                                    callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','重定向地址为空')")
+                                }
+                                return@Thread
+                            }
+                            currentUrl = if (location.startsWith("http")) {
+                                location
+                            } else {
+                                val base = URL(currentUrl)
+                                URL(base, location).toString()
+                            }
+                            redirectCount++
+                            continue
+                        }
+
+                        if (code != 200) {
+                            conn.disconnect()
+                            runOnUiThread {
+                                callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','服务器返回 $code')")
+                            }
+                            return@Thread
+                        }
+
+                        finalConn = conn
+                        break
+                    }
+
+                    if (finalConn == null) {
+                        runOnUiThread {
+                            callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','重定向次数过多')")
+                        }
+                        return@Thread
+                    }
+
+                    val totalSize = finalConn.contentLengthLong
+                    finalConn.inputStream.use { input ->
                         FileOutputStream(file).use { output ->
                             val buffer = ByteArray(8192)
                             var downloaded = 0L
                             var bytesRead: Int
+                            var lastPct = -1
                             while (input.read(buffer).also { bytesRead = it } != -1) {
                                 output.write(buffer, 0, bytesRead)
                                 downloaded += bytesRead
                                 if (totalSize > 0) {
                                     val pct = (downloaded * 100 / totalSize).toInt()
-                                    runOnUiThread {
-                                        callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('$filename',$pct,$totalSize)")
+                                    if (pct != lastPct && pct % 5 == 0) {
+                                        lastPct = pct
+                                        runOnUiThread {
+                                            callJs("if(window.onOnlineDownloadProgress)onOnlineDownloadProgress('$filename',$pct,$totalSize)")
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
+                    finalConn.disconnect()
+
+                    // 校验下载文件大小（小于 1KB 说明可能是错误页面）
+                    if (file.length() < 1024) {
+                        file.delete()
+                        runOnUiThread {
+                            callJs("if(window.onOnlineDownloadError)onOnlineDownloadError('$filename','下载文件过小，可能源不可用')")
+                        }
+                        return@Thread
                     }
 
                     // 获取 contentUri 供前端播放
