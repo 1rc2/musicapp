@@ -8,8 +8,8 @@ android {
         applicationId "com.musicflow.app"
         minSdk 21
         targetSdk 34
-        versionCode 10509
-        versionName "1.5.9"
+        versionCode 10600
+        versionName "1.6.0"
     }
 
     buildTypes {
