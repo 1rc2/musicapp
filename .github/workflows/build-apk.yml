@@ -18,35 +18,15 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     
-    - name: Setup Android environment
-      run: |
-        echo "ANDROID_HOME=$ANDROID_HOME"
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-        echo "--- SDK directory contents ---"
-        ls -la $ANDROID_SDK_ROOT/ || true
-        echo "--- Accepting licenses ---"
-        mkdir -p $ANDROID_SDK_ROOT/licenses
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
-        echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
-    
-    - name: Grant gradlew permission and build
+    - name: Grant permission and build
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace --info
+        ./gradlew assembleDebug
     
-    - name: List all APK files
-      run: |
-        echo "=== Searching for APK files ==="
-        find /home/runner/work -name "*.apk" -type f 2>/dev/null || echo "No APK found"
-        echo "=== Build outputs directory ==="
-        ls -laR android/app/build/outputs/ 2>/dev/null || echo "Outputs directory not found"
-    
-    - name: Upload to Release
+    - name: Upload APK
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          **/*.apk
-          android/app/build/outputs/**/*.apk
+        files: android/app/build/outputs/apk/debug/*.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
